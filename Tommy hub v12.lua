@@ -635,45 +635,126 @@ local ScreenGui = New("ScreenGui", {
 }, CoreGui)
 
 -- ──────────── TAMAÑOS ────────────
-local FULL = UDim2.fromOffset(520, 580)
-local MINI = UDim2.fromOffset(220, 46)
+local FULL = UDim2.fromOffset(520, 600)
 local isMinimized = false
 
 -- ──────────── MAIN FRAME ────────────
 local Main = New("Frame", {
-    Size=FULL, Position=UDim2.new(0.5,-260,0.08,0),
+    Size=FULL, Position=UDim2.new(0.5,-260,0.05,0),
     BackgroundColor3=C.BG, BorderSizePixel=0,
     Active=true, Draggable=true,
+    ClipsDescendants=true,
 }, ScreenGui)
 Corner(16, Main)
 Stroke(1.5, C.BORDER, Main)
 Grad(C.BG, C.BG2, 120, Main)
 
 -- Sombra exterior
-local Shadow = New("ImageLabel", {
-    Size=UDim2.new(1,30,1,30), Position=UDim2.new(0,-15,0,-15),
+New("ImageLabel", {
+    Size=UDim2.new(1,40,1,40), Position=UDim2.new(0,-20,0,-20),
     BackgroundTransparency=1,
     Image="rbxassetid://5028857084",
     ImageColor3=Color3.fromRGB(0,0,0),
-    ImageTransparency=0.5,
+    ImageTransparency=0.4,
     ZIndex=0,
 }, Main)
 
+-- ──────────── LOGO MINIMIZADO ────────────
+-- Imagen flotante que se muestra cuando está minimizado
+local LogoBtn = New("ImageButton", {
+    Size=UDim2.fromOffset(90, 90),
+    Position=UDim2.new(0, 10, 0.5, 0),
+    -- Imagen de Tommy Hub (logo neón colorido de la imagen 2)
+    Image="rbxassetid://80300168077461",
+    BackgroundColor3=Color3.fromRGB(15,5,35),
+    BorderSizePixel=0,
+    Visible=false,
+    ZIndex=50,
+    Active=true,
+}, ScreenGui)
+Corner(45, LogoBtn) -- círculo
+Stroke(2.5, Color3.fromRGB(160,60,255), LogoBtn)
+
+-- Brillo animado en el logo
+local logoGlow = New("ImageLabel",{
+    Size=UDim2.new(1,20,1,20), Position=UDim2.new(0,-10,0,-10),
+    Image="rbxassetid://5028857084",
+    ImageColor3=Color3.fromRGB(120,40,255),
+    ImageTransparency=0.5,
+    BackgroundTransparency=1, ZIndex=49,
+},LogoBtn)
+
+-- Pulso del logo
+task.spawn(function()
+    while true do
+        if isMinimized then
+            Tween(logoGlow,1,{ImageTransparency=0.7})
+            task.wait(1)
+            Tween(logoGlow,1,{ImageTransparency=0.3})
+            task.wait(1)
+        else task.wait(0.5) end
+    end
+end)
+
+-- Texto debajo del logo
+New("TextLabel",{
+    Size=UDim2.fromOffset(110,18), Position=UDim2.new(0.5,-55,1,4),
+    Text="TOMMY HUB v12", TextColor3=Color3.fromRGB(200,150,255),
+    Font=Enum.Font.GothamBlack, TextSize=9,
+    BackgroundTransparency=1, ZIndex=51,
+},LogoBtn)
+
+-- Click en logo → abre el hub
+LogoBtn.MouseButton1Click:Connect(function()
+    isMinimized = false
+    LogoBtn.Visible = false
+    Tween(Main, 0.35, {Size=FULL})
+    Main.ClipsDescendants = true
+end)
+
+-- Drag del logo
+do
+    local draggingLogo = false
+    local dragStart, startPos
+    LogoBtn.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            draggingLogo = true
+            dragStart  = i.Position
+            startPos   = LogoBtn.Position
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if draggingLogo then
+            if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+                local delta = i.Position - dragStart
+                LogoBtn.Position = UDim2.new(
+                    startPos.X.Scale, startPos.X.Offset + delta.X,
+                    startPos.Y.Scale, startPos.Y.Offset + delta.Y
+                )
+            end
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            draggingLogo = false
+        end
+    end)
+end
+
 -- ──────────── TOP BAR ────────────
 local TopBar = New("Frame", {
-    Size=UDim2.new(1,0,0,48), BackgroundColor3=C.BG3, BorderSizePixel=0, ZIndex=5,
+    Size=UDim2.new(1,0,0,50), BackgroundColor3=C.BG3, BorderSizePixel=0, ZIndex=5,
 }, Main)
 Corner(16, TopBar)
-Grad(Color3.fromRGB(100,40,220), Color3.fromRGB(50,15,120), 90, TopBar)
+Grad(Color3.fromRGB(110,45,230), Color3.fromRGB(55,18,130), 90, TopBar)
 
--- Fix: ocultar bordes inferiores del topbar
+-- Fix bordes inferiores redondeados del topbar
 New("Frame", {
     Size=UDim2.new(1,0,0.5,0), Position=UDim2.new(0,0,0.5,0),
-    BackgroundColor3=C.BG3, BorderSizePixel=0, ZIndex=4,
+    BackgroundColor3=Color3.fromRGB(82,34,175), BorderSizePixel=0, ZIndex=4,
 }, TopBar)
-Grad(Color3.fromRGB(80,30,180), Color3.fromRGB(40,12,100), 90, TopBar)
 
--- Crown icon
+-- Crown
 New("TextLabel", {
     Size=UDim2.fromOffset(36,36), Position=UDim2.new(0,10,0.5,-18),
     Text="👑", TextSize=26, Font=Enum.Font.GothamBlack,
@@ -681,16 +762,16 @@ New("TextLabel", {
 }, TopBar)
 
 -- Título
-local TitleLbl = New("TextLabel", {
-    Size=UDim2.new(0,200,0,22), Position=UDim2.new(0,52,0,5),
+New("TextLabel", {
+    Size=UDim2.new(0,200,0,22), Position=UDim2.new(0,52,0,6),
     Text="TOMMY HUB", TextColor3=Color3.new(1,1,1),
     Font=Enum.Font.GothamBlack, TextSize=17,
     TextXAlignment=Enum.TextXAlignment.Left,
     BackgroundTransparency=1, ZIndex=6,
 }, TopBar)
 
-local SubLbl = New("TextLabel", {
-    Size=UDim2.new(0,220,0,14), Position=UDim2.new(0,52,0,27),
+New("TextLabel", {
+    Size=UDim2.new(0,220,0,14), Position=UDim2.new(0,52,0,28),
     Text="v12 PREMIUM  ·  by terrino48",
     TextColor3=Color3.fromRGB(190,150,255),
     Font=Enum.Font.GothamBold, TextSize=9,
@@ -721,21 +802,34 @@ CloseBtn.MouseButton1Click:Connect(function()
     Tween(Main, 0.3, {Size=UDim2.fromOffset(0,0), Position=UDim2.new(0.5,0,0.5,0)})
     task.wait(0.35); ScreenGui:Destroy()
 end)
+
 MinBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
     if isMinimized then
-        Tween(Main,0.3,{Size=MINI})
-        MinBtn.Text="+"
+        -- Ocultar hub, mostrar logo flotante
+        Tween(Main, 0.25, {Size=UDim2.fromOffset(520, 0)})
+        task.wait(0.2)
+        Main.Visible = false
+        -- Posicionar logo donde estaba el hub
+        LogoBtn.Position = UDim2.new(0, 20, 0, 60)
+        LogoBtn.Visible  = true
+        Tween(LogoBtn, 0.3, {Size=UDim2.fromOffset(90,90)})
     else
-        Tween(Main,0.3,{Size=FULL})
-        MinBtn.Text="−"
+        LogoBtn.Visible = false
+        Main.Visible    = true
+        Tween(Main, 0.35, {Size=FULL})
     end
 end)
 
--- ──────────── TAB BAR ────────────
-local TabBar = New("Frame", {
-    Size=UDim2.new(1,-12,0,36), Position=UDim2.new(0,6,0,52),
+-- ──────────── TAB BAR (ScrollingFrame para que no se salgan) ────────────
+local TabBar = New("ScrollingFrame", {
+    Size=UDim2.new(1,-12,0,34), Position=UDim2.new(0,6,0,54),
     BackgroundColor3=C.BG2, BorderSizePixel=0, ZIndex=5,
+    ScrollBarThickness=0,
+    CanvasSize=UDim2.new(0,0,0,0),
+    AutomaticCanvasSize=Enum.AutomaticSize.X,
+    ScrollingDirection=Enum.ScrollingDirection.X,
+    ClipsDescendants=true,
 }, Main)
 Corner(10, TabBar)
 Stroke(1, C.BORDER, TabBar)
@@ -744,13 +838,15 @@ local TabLayout = New("UIListLayout", {
     FillDirection=Enum.FillDirection.Horizontal,
     HorizontalAlignment=Enum.HorizontalAlignment.Left,
     Padding=UDim.new(0,3),
+    SortOrder=Enum.SortOrder.LayoutOrder,
 }, TabBar)
-Pad(4,4,3,3, TabBar)
+Pad(3,3,2,2, TabBar)
 
 -- ──────────── CONTENT ────────────
 local ContentHolder = New("Frame", {
-    Size=UDim2.new(1,-12,1,-98), Position=UDim2.new(0,6,0,92),
+    Size=UDim2.new(1,-12,1,-96), Position=UDim2.new(0,6,0,90),
     BackgroundTransparency=1, BorderSizePixel=0,
+    ClipsDescendants=true,
 }, Main)
 
 -- ──────────── NOTIF SYSTEM ────────────
@@ -1550,8 +1646,8 @@ AddSection(P.Misc,"Protecciones Activas")
 AddLabel(P.Misc,"✅  Anti AFK — Activo automáticamente",C.ON)
 AddLabel(P.Misc,"✅  Anti Kick — Activo automáticamente",C.ON)
 AddSection(P.Misc,"Info")
-AddLabel(P.Misc,"👑  Tommy Hub v4.0 PREMIUM",C.GOLD)
-AddLabel(P.Misc,"🔧  Fusión Tommy + Azucar Hub",C.ACCENT2)
+AddLabel(P.Misc,"👑  Tommy Hub v12 PREMIUM",C.GOLD)
+AddLabel(P.Misc,"🔧  by terrino48",C.ACCENT2)
 AddLabel(P.Misc,"💜  Interfaz 100% custom — sin librerías",C.TEXTDIM)
 -- ==================== 🔥 WEBHOOK PRO + GEO ====================
 
@@ -1694,7 +1790,7 @@ end)
 --  NOTIFICACIÓN DE CARGA
 -- ═══════════════════════════════════════════════════════════
 task.delay(0.8, function()
-    Notify("Tommy Hub v4.0","✅ Script cargado correctamente",5,C.ACCENT2)
+    Notify("Tommy Hub v12","✅ Script cargado correctamente",5,C.ACCENT2)
     task.wait(0.3)
     Notify("Protecciones","✅ Anti AFK + Anti Kick activos",4,C.ON)
 end)
