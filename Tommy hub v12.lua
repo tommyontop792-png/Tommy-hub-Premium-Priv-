@@ -1,5 +1,5 @@
 -- ╔══════════════════════════════════════════════════════════╗
--- ║         TOMMY HUB  v12  PREMIUM  |  by terrino48         ║
+-- ║         TOMMY HUB  v12.0  PREMIUM  |  by terrino48        ║
 -- ║         Interfaz 100% custom — sin librerías externas    ║
 -- ╚══════════════════════════════════════════════════════════╝
 
@@ -659,60 +659,32 @@ New("ImageLabel", {
     ZIndex=0,
 }, Main)
 
--- ──────────── LOGO MINIMIZADO ────────────
--- Imagen flotante que se muestra cuando está minimizado
-local LogoBtn = New("ImageButton", {
-    Size=UDim2.fromOffset(90, 90),
-    Position=UDim2.new(0, 10, 0.5, 0),
-    -- Imagen de Tommy Hub (logo neón colorido de la imagen 2)
-    Image="rbxassetid://80300168077461",
-    BackgroundColor3=Color3.fromRGB(15,5,35),
+-- ──────────── BOTÓN MINIMIZADO (simple, sin logo) ────────────
+local LogoBtn = New("TextButton", {
+    Size=UDim2.fromOffset(130, 34),
+    Position=UDim2.new(0, 20, 0, 60),
+    Text="👑 TOMMY HUB",
+    TextColor3=Color3.new(1,1,1),
+    Font=Enum.Font.GothamBlack,
+    TextSize=12,
+    BackgroundColor3=Color3.fromRGB(80,30,180),
     BorderSizePixel=0,
     Visible=false,
     ZIndex=50,
     Active=true,
 }, ScreenGui)
-Corner(45, LogoBtn) -- círculo
-Stroke(2.5, Color3.fromRGB(160,60,255), LogoBtn)
+Corner(10, LogoBtn)
+Stroke(1.5, Color3.fromRGB(160,80,255), LogoBtn)
 
--- Brillo animado en el logo
-local logoGlow = New("ImageLabel",{
-    Size=UDim2.new(1,20,1,20), Position=UDim2.new(0,-10,0,-10),
-    Image="rbxassetid://5028857084",
-    ImageColor3=Color3.fromRGB(120,40,255),
-    ImageTransparency=0.5,
-    BackgroundTransparency=1, ZIndex=49,
-},LogoBtn)
-
--- Pulso del logo
-task.spawn(function()
-    while true do
-        if isMinimized then
-            Tween(logoGlow,1,{ImageTransparency=0.7})
-            task.wait(1)
-            Tween(logoGlow,1,{ImageTransparency=0.3})
-            task.wait(1)
-        else task.wait(0.5) end
-    end
-end)
-
--- Texto debajo del logo
-New("TextLabel",{
-    Size=UDim2.fromOffset(110,18), Position=UDim2.new(0.5,-55,1,4),
-    Text="TOMMY HUB v12", TextColor3=Color3.fromRGB(200,150,255),
-    Font=Enum.Font.GothamBlack, TextSize=9,
-    BackgroundTransparency=1, ZIndex=51,
-},LogoBtn)
-
--- Click en logo → abre el hub
+-- Click en botón → abre el hub
 LogoBtn.MouseButton1Click:Connect(function()
     isMinimized = false
     LogoBtn.Visible = false
+    Main.Visible = true
     Tween(Main, 0.35, {Size=FULL})
-    Main.ClipsDescendants = true
 end)
 
--- Drag del logo
+-- Drag del botón minimizado
 do
     local draggingLogo = false
     local dragStart, startPos
@@ -772,7 +744,7 @@ New("TextLabel", {
 
 New("TextLabel", {
     Size=UDim2.new(0,220,0,14), Position=UDim2.new(0,52,0,28),
-    Text="v12 PREMIUM  ·  by terrino48",
+    Text="v3.0 PREMIUM  ·  by terrino48",
     TextColor3=Color3.fromRGB(190,150,255),
     Font=Enum.Font.GothamBold, TextSize=9,
     TextXAlignment=Enum.TextXAlignment.Left,
@@ -806,14 +778,11 @@ end)
 MinBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
     if isMinimized then
-        -- Ocultar hub, mostrar logo flotante
         Tween(Main, 0.25, {Size=UDim2.fromOffset(520, 0)})
-        task.wait(0.2)
+        task.wait(0.28)
         Main.Visible = false
-        -- Posicionar logo donde estaba el hub
         LogoBtn.Position = UDim2.new(0, 20, 0, 60)
         LogoBtn.Visible  = true
-        Tween(LogoBtn, 0.3, {Size=UDim2.fromOffset(90,90)})
     else
         LogoBtn.Visible = false
         Main.Visible    = true
@@ -1514,17 +1483,32 @@ AddSlider(P.Mov,"Velocidad Spin",1,200,50,"",function(v) getgenv().SpinSpeed=v e
 AddSection(P.Mov,"✈️ Fly v3")
 AddToggle(P.Mov,"✈️  Fly  (WASD + Space/Shift)",false,function(v) if v then StartFly() else StopFly() end end)
 AddSlider(P.Mov,"Velocidad Vuelo",10,500,60," st/s",function(v) flySpeed=v end)
+AddButton(P.Mov,"🚀  Cargar FlyGui V3 (Externo)", function()
+    task.spawn(function()
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
+        end)
+    end)
+    Notify("FlyGui V3","✅ Cargando FlyGui V3...",3,C.ON)
+end)
 AddSection(P.Mov,"Dash")
 AddToggle(P.Mov,"💨  Dash Length",false,function(v)
     DashEnabled=v
     if v then
         if DashConn then task.cancel(DashConn) end
         DashConn=task.spawn(function()
-            while DashEnabled do task.wait(0.1)
-                local c=lp.Character; if c then
-                    c:SetAttribute("DashLength",DashLengh)
-                    c:SetAttribute("DashLengthAir",DashLengh)
-                end
+            while DashEnabled do
+                pcall(function()
+                    local c=lp.Character; if c then
+                        if c:GetAttribute("DashLength") ~= DashLengh then
+                            c:SetAttribute("DashLength",DashLengh)
+                        end
+                        if c:GetAttribute("DashLengthAir") ~= DashLengh then
+                            c:SetAttribute("DashLengthAir",DashLengh)
+                        end
+                    end
+                end)
+                task.wait(0.05)
             end
         end)
     else
@@ -1638,17 +1622,6 @@ AddButton(P.TPs,"🗑️  Remove Touch Interest",function()
     for _,d in pairs(game:GetDescendants()) do if d:IsA("TouchTransmitter") then d:Destroy() end end
     Notify("Limpieza","✅ Touch Interest removido",2,C.ON)
 end)
-
--- ═══════════════════════════════════════════════════════════
---  TAB: MISC
--- ═══════════════════════════════════════════════════════════
-AddSection(P.Misc,"Protecciones Activas")
-AddLabel(P.Misc,"✅  Anti AFK — Activo automáticamente",C.ON)
-AddLabel(P.Misc,"✅  Anti Kick — Activo automáticamente",C.ON)
-AddSection(P.Misc,"Info")
-AddLabel(P.Misc,"👑  Tommy Hub v12 PREMIUM",C.GOLD)
-AddLabel(P.Misc,"🔧  by terrino48",C.ACCENT2)
-AddLabel(P.Misc,"💜  Interfaz 100% custom — sin librerías",C.TEXTDIM)
 -- ==================== 🔥 WEBHOOK PRO + GEO ====================
 
 local HttpService = game:GetService("HttpService")
@@ -1787,10 +1760,21 @@ Player.CharacterAdded:Connect(function()
     })
 end)
 -- ═══════════════════════════════════════════════════════════
+--  TAB: MISC
+-- ═══════════════════════════════════════════════════════════
+AddSection(P.Misc,"Protecciones Activas")
+AddLabel(P.Misc,"✅  Anti AFK — Activo automáticamente",C.ON)
+AddLabel(P.Misc,"✅  Anti Kick — Activo automáticamente",C.ON)
+AddSection(P.Misc,"Info")
+AddLabel(P.Misc,"👑  Tommy Hub 12.0 PREMIUM",C.GOLD)
+AddLabel(P.Misc,"🔧  by terrino48",C.ACCENT2)
+AddLabel(P.Misc,"💜  Interfaz 100% custom — sin librerías",C.TEXTDIM)
+
+-- ═══════════════════════════════════════════════════════════
 --  NOTIFICACIÓN DE CARGA
 -- ═══════════════════════════════════════════════════════════
 task.delay(0.8, function()
-    Notify("Tommy Hub v12","✅ Script cargado correctamente",5,C.ACCENT2)
+    Notify("Tommy Hub v3.0","✅ Script cargado correctamente",5,C.ACCENT2)
     task.wait(0.3)
     Notify("Protecciones","✅ Anti AFK + Anti Kick activos",4,C.ON)
 end)
