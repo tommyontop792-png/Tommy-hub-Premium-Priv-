@@ -1,8 +1,10 @@
 -- ============================================================
---  TOMMY HUB  |  Bounty Abuse v2
---  - Interfaz anclada (no se mueve al hacer scroll)
---  - Auto Z melee
---  - Server hop automático al limpiar el servidor
+--  TOMMY HUB  |  Bounty Abuse v3
+--  - Minimizable
+--  - Sin Auto Z Sword
+--  - Sky Launch (90,000 metros)
+--  - Auto Z Melee + INF con Spawn Abuse Reset
+--  - Server Hop avanzado (ServerBrowser + API fallback)
 -- ============================================================
 
 local Players             = game:GetService("Players")
@@ -12,22 +14,168 @@ local UserInputService    = game:GetService("UserInputService")
 local TweenService        = game:GetService("TweenService")
 local TeleportService     = game:GetService("TeleportService")
 local ReplicatedStorage   = game:GetService("ReplicatedStorage")
+local HttpService         = game:GetService("HttpService")
 
-local lp = Players.LocalPlayer
+local lp      = Players.LocalPlayer
+local _place  = game.PlaceId
+local _id     = game.JobId
 
 -- ── Estado global ──
 getgenv().AbuseActive    = false
 getgenv().SelectedSlot   = Enum.KeyCode.Three
 getgenv().AutoZMelee     = false
-getgenv().AutoZSword     = false
 getgenv().AutoSVHop      = false
+getgenv().InfMeleeActive = false
 
 local bountyInicial  = 0
 local killsSesion    = 0
 local sessionStart   = os.time()
 local svHopStatus    = ""
 
--- ── Colores ──
+-- ============================================================
+--  SERVER HOP AVANZADO (ServerBrowser + API fallback)
+-- ============================================================
+getgenv().HopConfig = getgenv().HopConfig or {
+    minPlayers  = 8,
+    maxPlayers  = 11,
+    minBounty   = nil,
+    maxBounty   = nil,
+    region      = nil,
+    fallbackAny = true,
+}
+
+local browser = ReplicatedStorage:FindFirstChild("__ServerBrowser")
+
+local function HopAdvanced()
+    local hc = getgenv().HopConfig
+    local allServers = {}
+    local useInternal = false
+    local foundData = false
+    local pendingCount = 0
+
+    if browser then
+        for page = 1, 100 do
+            if foundData then break end
+            pendingCount = pendingCount + 1
+            task.spawn(function()
+                local ok, result = pcall(function()
+                    return browser:InvokeServer(page)
+                end)
+                if ok and type(result) == "table" then
+                    local valid = 0
+                    for uuid, info in pairs(result) do
+                        if type(info) == "table" and info.Count then
+                            allServers[uuid] = info
+                            valid = valid + 1
+                        end
+                    end
+                    if valid > 0 and not foundData then
+                        foundData = true
+                        useInternal = true
+                    end
+                end
+                pendingCount = pendingCount - 1
+            end)
+        end
+
+        local waited = 0
+        while pendingCount > 0 and waited < 6 do
+            task.wait(0.2); waited += 0.2
+            if foundData and waited > 1 then break end
+        end
+    end
+
+    local apiServers = {}
+    if not useInternal then
+        pcall(function()
+            local r = HttpService:JSONDecode(game:HttpGet(
+                "https://games.roblox.com/v1/games/" .. _place
+                .. "/servers/Public?sortOrder=Desc&limit=100"
+            ))
+            if r and r.data then
+                for _, sv in ipairs(r.data) do table.insert(apiServers, sv) end
+            end
+        end)
+        pcall(function()
+            local r = HttpService:JSONDecode(game:HttpGet(
+                "https://games.roblox.com/v1/games/" .. _place
+                .. "/servers/Public?sortOrder=Asc&limit=100"
+            ))
+            if r and r.data then
+                for _, sv in ipairs(r.data) do table.insert(apiServers, sv) end
+            end
+        end)
+        if #apiServers == 0 then
+            TeleportService:Teleport(_place, lp)
+            return false
+        end
+    end
+
+    local seen, matched, anyValid = {}, {}, {}
+
+    if useInternal then
+        for uuid, info in pairs(allServers) do
+            if uuid ~= _id then
+                local count  = info.Count or 0
+                local bounty = info.Bounty or 0
+                local region = info.Region or ""
+                local entry  = {uuid=uuid, count=count, maxP=12, bounty=bounty, region=region}
+                table.insert(anyValid, entry)
+                local ok = true
+                if hc.minPlayers and count  < hc.minPlayers then ok = false end
+                if hc.maxPlayers and count  > hc.maxPlayers then ok = false end
+                if hc.minBounty  and bounty < hc.minBounty  then ok = false end
+                if hc.maxBounty  and bounty > hc.maxBounty  then ok = false end
+                if hc.region and hc.region ~= "" then
+                    if not string.find(string.lower(region), string.lower(hc.region), 1, true) then
+                        ok = false
+                    end
+                end
+                if ok then table.insert(matched, entry) end
+            end
+        end
+    else
+        for _, sv in ipairs(apiServers) do
+            if sv.id and sv.id ~= _id and not seen[sv.id]
+               and sv.playing and sv.maxPlayers
+               and sv.playing < sv.maxPlayers then
+                seen[sv.id] = true
+                local entry = {uuid=sv.id, count=sv.playing, maxP=sv.maxPlayers, bounty=0, region="?"}
+                table.insert(anyValid, entry)
+                local ok = true
+                if hc.minPlayers and sv.playing < hc.minPlayers then ok = false end
+                if hc.maxPlayers and sv.playing > hc.maxPlayers then ok = false end
+                if ok then table.insert(matched, entry) end
+            end
+        end
+    end
+
+    if #matched == 0 then
+        if not hc.fallbackAny or #anyValid == 0 then
+            TeleportService:Teleport(_place, lp)
+            return false
+        end
+        matched = anyValid
+    end
+
+    table.sort(matched, function(a, b) return a.count > b.count end)
+    local topN   = math.min(10, #matched)
+    local chosen = matched[math.random(1, topN)]
+
+    if useInternal and browser then
+        local ok, err = pcall(function()
+            browser:InvokeServer("teleport", chosen.uuid)
+        end)
+        return ok
+    else
+        TeleportService:TeleportToPlaceInstance(_place, chosen.uuid, lp)
+        return true
+    end
+end
+
+-- ============================================================
+--  COLORES
+-- ============================================================
 local C = {
     BG      = Color3.fromRGB(8,   8,  14),
     CARD    = Color3.fromRGB(14,  14, 24),
@@ -40,11 +188,12 @@ local C = {
     TEXT    = Color3.fromRGB(230, 230, 245),
     MUTED   = Color3.fromRGB(110, 110, 140),
     BORDER  = Color3.fromRGB(80,   0, 180),
-    ON      = Color3.fromRGB(60,   0, 100),
-    ACTIVE  = Color3.fromRGB(130,  0, 230),
+    SKY     = Color3.fromRGB(50,  150, 255),
 }
 
--- ── Helpers GUI ──
+-- ============================================================
+--  HELPERS GUI
+-- ============================================================
 local function corner(p, r)
     Instance.new("UICorner", p).CornerRadius = UDim.new(0, r or 8)
 end
@@ -61,9 +210,9 @@ local function grad(p, c0, c1, rot)
     g.Color = ColorSequence.new(c0, c1); g.Rotation = rot or 90
 end
 
--- ══════════════════════════════════════════════════════════
+-- ============================================================
 --  LÓGICA ABUSE
--- ══════════════════════════════════════════════════════════
+-- ============================================================
 local function Press(key)
     VirtualInputManager:SendKeyEvent(true,  key, false, game)
     task.wait(0.01)
@@ -105,24 +254,17 @@ local function ExecuteAbuse()
     end
 end
 
-local function VoidSkill()
-    local hrp = getHRP(); if not hrp then return end
-    local oldPos = hrp.CFrame
-    hrp.Anchored = true
-    hrp.CFrame   = CFrame.new(923.2, 3e21, 32852.8)
-    workspace.CurrentCamera.CFrame = hrp.CFrame
-    task.wait(0.1)
-    Press(Enum.KeyCode.Z)
-    task.wait(0.8)
-    hrp.CFrame = oldPos
-    local hum = getHum()
-    if hum then workspace.CurrentCamera.CameraSubject = hum end
+-- ── SKY LAUNCH: sube 90,000 metros ──
+local function SkyLaunch()
+    local hrp = getHRP()
+    if not hrp then return end
     hrp.Anchored = false
+    hrp.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 90000, 0))
 end
 
--- ══════════════════════════════════════════════════════════
---  AUTO Z MELEE + ABUSE RESET
--- ══════════════════════════════════════════════════════════
+-- ============================================================
+--  AUTO Z MELEE + INF CON SPAWN ABUSE RESET
+-- ============================================================
 task.spawn(function()
     while true do
         task.wait(0.12)
@@ -147,22 +289,21 @@ task.spawn(function()
                     end
                 end
 
-                -- Activar Haki Buso
+                -- Haki Buso
                 pcall(function()
                     ReplicatedStorage.Remotes.CommF_:InvokeServer("Buso")
                 end)
 
-                -- Orbitar (abuse reset para que el Z haga daño)
-                local orbitAngle = math.random() * math.pi * 2
+                -- Orbitar (abuse reset)
+                local angle = math.random() * math.pi * 2
                 hrp.CFrame = hrp.CFrame * CFrame.new(
-                    math.cos(orbitAngle) * 3, 0, math.sin(orbitAngle) * 3
+                    math.cos(angle) * 3, 0, math.sin(angle) * 3
                 )
 
-                -- Presionar Z
                 Press(Enum.KeyCode.Z)
                 task.wait(0.3)
 
-                -- Abuse reset (die y respawn para volver a usar Z)
+                -- Spawn abuse reset
                 hum.Health = 0
                 killsSesion += 1
             end)
@@ -176,55 +317,44 @@ task.spawn(function()
     end
 end)
 
--- ══════════════════════════════════════════════════════════
---  AUTO Z SWORD + ABUSE RESET
--- ══════════════════════════════════════════════════════════
+-- ============================================================
+--  INF MELEE LOOP (sin morir, spamea Z continuamente)
+-- ============================================================
 task.spawn(function()
     while true do
-        task.wait(0.12)
-        if getgenv().AutoZSword then
+        task.wait(0.1)
+        if getgenv().InfMeleeActive then
             pcall(function()
                 local char = lp.Character
                 local hum  = getHum()
                 local hrp  = getHRP()
                 if not (char and hum and hrp and hum.Health > 0) then return end
 
-                -- Equipar sword
                 for _, tool in pairs(lp.Backpack:GetChildren()) do
                     if tool:IsA("Tool") and (
-                        tool.ToolTip == "Sword" or
-                        tool.Name:lower():find("sword") or
-                        tool.Name:lower():find("katana") or
-                        tool.Name:lower():find("blade") or
-                        tool.Name:lower():find("sabre") or
-                        tool.Name:lower():find("cutlass")
+                        tool.ToolTip == "Melee" or
+                        tool.Name:lower():find("fist") or
+                        tool.Name:lower():find("melee") or
+                        tool.Name:lower():find("combat") or
+                        tool.Name:lower():find("fighting")
                     ) then
                         hum:EquipTool(tool)
                         break
                     end
                 end
 
-                -- Activar Haki Buso
                 pcall(function()
                     ReplicatedStorage.Remotes.CommF_:InvokeServer("Buso")
                 end)
 
-                -- Orbitar (abuse reset para que el Z haga daño)
-                local orbitAngle = math.random() * math.pi * 2
-                hrp.CFrame = hrp.CFrame * CFrame.new(
-                    math.cos(orbitAngle) * 3, 0, math.sin(orbitAngle) * 3
-                )
-
-                -- Presionar Z
                 Press(Enum.KeyCode.Z)
-                task.wait(0.3)
+                task.wait(0.2)
 
-                -- Abuse reset
+                -- Abuse reset (spawn)
                 hum.Health = 0
                 killsSesion += 1
             end)
 
-            -- Esperar respawn
             if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then
                 lp.CharacterAdded:Wait()
                 task.wait(0.5)
@@ -233,33 +363,9 @@ task.spawn(function()
     end
 end)
 
--- ══════════════════════════════════════════════════════════
---  SERVER HOP
--- ══════════════════════════════════════════════════════════
-local function doServerHop()
-    local placeId = game.PlaceId
-    local jobId   = game.JobId
-    local servers = {}
-
-    pcall(function()
-        local HttpService = game:GetService("HttpService")
-        local url  = "https://games.roblox.com/v1/games/"..placeId.."/servers/Public?sortOrder=Asc&limit=100"
-        local data = HttpService:JSONDecode(game:HttpGet(url))
-        for _, sv in pairs(data.data) do
-            if sv.id ~= jobId and sv.playing < sv.maxPlayers then
-                table.insert(servers, sv.id)
-            end
-        end
-    end)
-
-    if #servers > 0 then
-        TeleportService:TeleportToPlaceInstance(placeId, servers[math.random(1, #servers)], lp)
-    else
-        TeleportService:Teleport(placeId, lp)
-    end
-end
-
--- Detectar cuando se vacía el servidor
+-- ============================================================
+--  AUTO SERVER HOP al vaciar servidor
+-- ============================================================
 local function getEnemyCount()
     local count = 0
     for _, p in pairs(Players:GetPlayers()) do
@@ -274,11 +380,10 @@ Players.PlayerRemoving:Connect(function(p)
     if getEnemyCount() == 0 then
         svHopStatus = "🔀 Saltando de SV..."
         task.wait(1.5)
-        pcall(doServerHop)
+        pcall(HopAdvanced)
     end
 end)
 
--- Auto ejecutar al llegar a nuevo servidor
 pcall(function()
     TeleportService.LocalPlayerArrivedFromTeleport:Connect(function()
         task.wait(3)
@@ -288,9 +393,9 @@ pcall(function()
     end)
 end)
 
--- ══════════════════════════════════════════════════════════
+-- ============================================================
 --  GUI
--- ══════════════════════════════════════════════════════════
+-- ============================================================
 pcall(function() game:GetService("CoreGui"):FindFirstChild("TommyBountyUI"):Destroy() end)
 pcall(function() lp:WaitForChild("PlayerGui"):FindFirstChild("TommyBountyUI"):Destroy() end)
 
@@ -308,24 +413,22 @@ local sg = Instance.new("ScreenGui", guiParent)
 sg.Name = "TommyBountyUI"; sg.ResetOnSpawn = false
 sg.ZIndexBehavior = Enum.ZIndexBehavior.Global; sg.DisplayOrder = 999
 
--- ── CONTENEDOR FIJO (no se mueve con scroll) ──
--- El main nunca cambia de tamaño ni hace scroll.
--- Todo el contenido scrollable va dentro de un ScrollingFrame interno.
-local FULL = UDim2.fromOffset(224, 420)
+-- ── TAMAÑOS ──
+local FULL = UDim2.fromOffset(224, 480)
 local MINI = UDim2.fromOffset(224, 38)
 local isMin = false
 
 local main = Instance.new("Frame", sg)
 main.Size              = FULL
-main.Position          = UDim2.new(0, 14, 0.5, -210)
+main.Position          = UDim2.new(0, 14, 0.5, -240)
 main.BackgroundColor3  = C.BG
 main.BorderSizePixel   = 0
 main.Active            = true
-main.ClipsDescendants  = true   -- evita que nada se salga
+main.ClipsDescendants  = true
 corner(main, 14)
 local mainStroke = stroke(main, C.BORDER, 1.5)
 
--- ── TOP BAR (drag aquí, no en todo el frame) ──
+-- ── TOP BAR ──
 local topBar = Instance.new("Frame", main)
 topBar.Size             = UDim2.new(1, 0, 0, 38)
 topBar.BackgroundColor3 = Color3.fromRGB(16, 0, 36)
@@ -334,21 +437,18 @@ topBar.ZIndex           = 10
 corner(topBar, 14)
 grad(topBar, Color3.fromRGB(120, 0, 220), Color3.fromRGB(60, 0, 130))
 
--- Fix borde inferior topbar
 local tbFix = Instance.new("Frame", topBar)
 tbFix.Size = UDim2.new(1,0,0,12); tbFix.Position = UDim2.new(0,0,1,-12)
 tbFix.BackgroundColor3 = Color3.fromRGB(60, 0, 130); tbFix.BorderSizePixel = 0
 
--- Dot estado
 local dot = Instance.new("Frame", topBar)
 dot.Size = UDim2.fromOffset(8, 8); dot.Position = UDim2.new(0, 10, 0.5, -4)
 dot.BackgroundColor3 = C.GREEN; dot.BorderSizePixel = 0
 Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
 
--- Título
 local titleLbl = Instance.new("TextLabel", topBar)
 titleLbl.Size = UDim2.new(0, 145, 1, 0); titleLbl.Position = UDim2.new(0, 24, 0, 0)
-titleLbl.Text = "TOMMY HUB  ·  BOUNTY"
+titleLbl.Text = "TOMMY HUB  ·  BOUNTY v3"
 titleLbl.TextColor3 = Color3.new(1,1,1); titleLbl.Font = Enum.Font.GothamBlack
 titleLbl.TextSize = 11; titleLbl.TextXAlignment = Enum.TextXAlignment.Left
 titleLbl.BackgroundTransparency = 1
@@ -367,7 +467,7 @@ minBtn.MouseButton1Click:Connect(function()
     minBtn.Text = isMin and "+" or "−"
 end)
 
--- ── DRAG SOLO POR TOPBAR ──
+-- ── DRAG ──
 do
     local dragging, dragStart, startPos
     topBar.InputBegan:Connect(function(i)
@@ -398,7 +498,7 @@ do
     end)
 end
 
--- ── SCROLL FRAME INTERNO (contenido scrollable, NO mueve el main) ──
+-- ── SCROLL INTERNO ──
 local scroll = Instance.new("ScrollingFrame", main)
 scroll.Size                = UDim2.new(1, 0, 1, -38)
 scroll.Position            = UDim2.new(0, 0, 0, 38)
@@ -425,11 +525,9 @@ local function pad(p)
 end
 pad(scroll)
 
--- ── HELPERS DENTRO DEL SCROLL ──
+-- ── HELPERS SCROLL ──
 local rowOrder = 0
-local function nextOrder()
-    rowOrder += 1; return rowOrder
-end
+local function nextOrder() rowOrder += 1; return rowOrder end
 
 local function makeSeparator(txt)
     local f = Instance.new("Frame", scroll)
@@ -489,7 +587,6 @@ local function makeInfoRow(txtL, txtR)
     return left, right
 end
 
--- Toggle pill
 local function makeToggle(label, icon, onCallback, offCallback)
     local row = Instance.new("Frame", scroll)
     row.Size = UDim2.new(1, 0, 0, 40)
@@ -521,8 +618,8 @@ local function makeToggle(label, icon, onCallback, offCallback)
         isOn = not isOn
         tween(pill,  0.18, {BackgroundColor3 = isOn and C.ACCENT or Color3.fromRGB(30,30,50)})
         tween(knob,  0.18, {
-            Position          = isOn and UDim2.fromOffset(23, 3) or UDim2.fromOffset(3, 3),
-            BackgroundColor3  = isOn and C.GREEN or C.MUTED,
+            Position         = isOn and UDim2.fromOffset(23, 3) or UDim2.fromOffset(3, 3),
+            BackgroundColor3 = isOn and C.GREEN or C.MUTED,
         })
         local rowStroke = row:FindFirstChildOfClass("UIStroke")
         if rowStroke then rowStroke.Color = isOn and C.GREEN or C.BORDER end
@@ -533,7 +630,6 @@ local function makeToggle(label, icon, onCallback, offCallback)
         end
     end)
 
-    -- Retorna función para forzar estado OFF desde fuera
     return function()
         if isOn then
             isOn = false
@@ -582,9 +678,9 @@ local function makeRowBtns(t1, c1, cb1, t2, c2, cb2)
     return b1, b2
 end
 
--- ══════════════════════════════════════════════════════════
+-- ============================================================
 --  CONTENIDO DEL SCROLL
--- ══════════════════════════════════════════════════════════
+-- ============================================================
 
 -- Badge
 local badgeFrame = Instance.new("Frame", scroll)
@@ -593,7 +689,7 @@ badgeFrame.BackgroundColor3 = Color3.fromRGB(18, 0, 40)
 badgeFrame.BorderSizePixel = 0; badgeFrame.LayoutOrder = nextOrder()
 corner(badgeFrame, 6); stroke(badgeFrame, C.ACCENT, 1)
 local badgeLbl = Instance.new("TextLabel", badgeFrame)
-badgeLbl.Size = UDim2.new(1,0,1,0); badgeLbl.Text = "🏴‍☠️  PIRATA  ·  Bounty Abuse v2"
+badgeLbl.Size = UDim2.new(1,0,1,0); badgeLbl.Text = "🏴‍☠️  PIRATA  ·  Bounty Abuse v3"
 badgeLbl.TextColor3 = C.ACCENT2; badgeLbl.Font = Enum.Font.GothamBold
 badgeLbl.TextSize = 10; badgeLbl.BackgroundTransparency = 1
 
@@ -603,17 +699,15 @@ local bountyInicialVal = makeStatCard("💰  BOUNTY INICIAL",   "$0",  C.GOLD)
 local ganadasVal       = makeStatCard("📈  GANADO EN SESIÓN", "+$0", C.GREEN)
 local bountyActualVal  = makeStatCard("⭐  BOUNTY ACTUAL",    "$0",  C.GOLD)
 
--- Info row kills + timer
 local killsLbl, timerLbl = makeInfoRow("💀  Kills: 0", "⏱  0m 0s")
 
--- SV Hop status
 local svStatusLbl, _ = makeInfoRow("🔀  SV Hop: inactivo", "")
 svStatusLbl.TextColor3 = C.MUTED
 
--- Botones de abuse
+-- ── ABUSE ──
 makeSeparator("  ⚡  ABUSE")
 
-local forceOff3 = makeToggle("ABUSE SLOT 3", "⚡", function()
+makeToggle("ABUSE SLOT 3", "⚡", function()
     getgenv().SelectedSlot = Enum.KeyCode.Three
     getgenv().AbuseActive  = true
     task.spawn(ExecuteAbuse)
@@ -621,7 +715,7 @@ end, function()
     getgenv().AbuseActive = false
 end)
 
-local forceOff1 = makeToggle("ABUSE SLOT 1", "⚡", function()
+makeToggle("ABUSE SLOT 1", "⚡", function()
     getgenv().SelectedSlot = Enum.KeyCode.One
     getgenv().AbuseActive  = true
     task.spawn(ExecuteAbuse)
@@ -629,12 +723,12 @@ end, function()
     getgenv().AbuseActive = false
 end)
 
--- INF + FIX
+-- INF + FIX CAM
 makeRowBtns(
     "🌀  INF",
     Color3.fromRGB(30, 0, 60),
     function()
-        task.spawn(VoidSkill)
+        getgenv().InfMeleeActive = not getgenv().InfMeleeActive
     end,
     "🔧  FIX CAM",
     Color3.fromRGB(20, 0, 40),
@@ -651,24 +745,23 @@ makeRowBtns(
     end
 )
 
--- Auto Z Melee + Sword
-makeSeparator("  🥊  AUTO Z")
+-- ── AUTO Z MELEE ──
+makeSeparator("  🥊  AUTO Z MELEE")
 
-makeToggle("Auto Z Melee + Reset", "🥊", function()
+makeToggle("Auto Z Melee + Spawn Reset", "🥊", function()
     getgenv().AutoZMelee = true
-    getgenv().AutoZSword = false  -- solo uno activo a la vez
 end, function()
     getgenv().AutoZMelee = false
 end)
 
-makeToggle("Auto Z Sword + Reset", "⚔️", function()
-    getgenv().AutoZSword = true
-    getgenv().AutoZMelee = false  -- solo uno activo a la vez
-end, function()
-    getgenv().AutoZSword = false
+-- ── SKY LAUNCH ──
+makeSeparator("  🚀  SKY LAUNCH")
+
+makeBtn("🚀  LANZAR AL CIELO (90,000m)", Color3.fromRGB(20, 60, 120), Color3.fromRGB(50, 120, 220), function()
+    task.spawn(SkyLaunch)
 end)
 
--- Server Hop
+-- ── SERVER HOP ──
 makeSeparator("  🌐  SERVER HOP")
 
 makeToggle("Auto SV Hop (al vaciar SV)", "🔀", function()
@@ -686,7 +779,7 @@ makeBtn("🔀  HOP MANUAL", Color3.fromRGB(30, 0, 70), Color3.fromRGB(70, 0, 150
     svStatusLbl.TextColor3 = C.ACCENT2
     task.spawn(function()
         task.wait(0.5)
-        pcall(doServerHop)
+        pcall(HopAdvanced)
     end)
 end)
 
@@ -698,9 +791,9 @@ lp.CharacterAdded:Connect(function()
     end
 end)
 
--- ══════════════════════════════════════════════════════════
+-- ============================================================
 --  ACTUALIZAR STATS EN TIEMPO REAL
--- ══════════════════════════════════════════════════════════
+-- ============================================================
 task.spawn(function()
     local function getBounty()
         local ok, val = pcall(function()
@@ -726,21 +819,16 @@ task.spawn(function()
     while true do
         task.wait(1)
 
-        -- Timer
         local elapsed = os.time() - sessionStart
         timerLbl.Text = string.format("⏱  %dm %ds", math.floor(elapsed/60), elapsed%60)
-
-        -- Kills
         killsLbl.Text = "💀  Kills: "..killsSesion
 
-        -- SV hop status
         if svHopStatus ~= "" then
             svStatusLbl.Text = svHopStatus
             svStatusLbl.TextColor3 = C.ACCENT2
             svHopStatus = ""
         end
 
-        -- Bounty
         local cur = getBounty()
         if cur then
             bountyActualVal.Text = "$"..tostring(math.floor(cur))
@@ -754,7 +842,6 @@ task.spawn(function()
             end
         end
 
-        -- Dot
         dot.BackgroundColor3 = getgenv().AbuseActive and C.RED or C.GREEN
     end
 end)
@@ -771,4 +858,4 @@ task.spawn(function()
     end
 end)
 
-print("[Tommy Hub] Bounty Abuse v2 cargado ✓")
+print("[Tommy Hub] Bounty Abuse v3 cargado ✓")
