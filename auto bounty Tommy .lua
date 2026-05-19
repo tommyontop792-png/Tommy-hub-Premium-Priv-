@@ -94,21 +94,24 @@ local function ExecuteInfAuto()
     if not hrp or not hum or hum.Health <= 0 then return end
     AutoHaki()
     EquipCombat()
-    task.wait(0.1)
+    task.wait(0.15)
     local target = GetNearestPlayer()
     local targetHRP = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
     local oldPos = hrp.CFrame
     hrp.Anchored = true
     if targetHRP then
         local tPos = targetHRP.Position
-        hrp.CFrame = CFrame.lookAt(Vector3.new(tPos.X, tPos.Y+80, tPos.Z), Vector3.new(tPos.X, tPos.Y, tPos.Z))
+        hrp.CFrame = CFrame.lookAt(
+            Vector3.new(tPos.X, tPos.Y+15, tPos.Z+5),
+            Vector3.new(tPos.X, tPos.Y, tPos.Z)
+        )
     else
         hrp.CFrame = CFrame.new(923.2, 3e21, 32852.8)
     end
     workspace.CurrentCamera.CFrame = hrp.CFrame
-    task.wait(0.08)
+    task.wait(0.1)
     Press(Enum.KeyCode.Z)
-    task.wait(0.35)
+    task.wait(0.6)
     hrp.CFrame = oldPos
     hrp.Anchored = false
     pcall(function() workspace.CurrentCamera.CameraSubject = hum end)
@@ -135,8 +138,8 @@ screenGui.Name = "TommyHub"
 screenGui.ResetOnSpawn = false
 
 local MainFrame = Instance.new("Frame", screenGui)
-MainFrame.Size = UDim2.new(0,220,0,400)
-MainFrame.Position = UDim2.new(0.5,-110,0.5,-200)
+MainFrame.Size = UDim2.new(0,220,0,460)
+MainFrame.Position = UDim2.new(0.5,-110,0.5,-230)
 MainFrame.BackgroundColor3 = Color3.fromRGB(10,0,20)
 MainFrame.BorderSizePixel = 0
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0,12)
@@ -190,7 +193,7 @@ ContentFrame.Position = UDim2.new(0,0,0,40)
 ContentFrame.BackgroundTransparency = 1
 ContentFrame.ScrollBarThickness = 3
 ContentFrame.ScrollBarImageColor3 = Color3.fromRGB(160,0,255)
-ContentFrame.CanvasSize = UDim2.new(0,0,0,500)
+ContentFrame.CanvasSize = UDim2.new(0,0,0,560)
 ContentFrame.BorderSizePixel = 0
 local cfLayout = Instance.new("UIListLayout", ContentFrame)
 cfLayout.Padding = UDim.new(0,8)
@@ -202,7 +205,7 @@ local minimized = false
 MinBtn.MouseButton1Click:Connect(function()
     minimized = not minimized
     ContentFrame.Visible = not minimized
-    MainFrame.Size = minimized and UDim2.new(0,220,0,36) or UDim2.new(0,220,0,400)
+    MainFrame.Size = minimized and UDim2.new(0,220,0,36) or UDim2.new(0,220,0,460)
     MinBtn.Text = minimized and "+" or "−"
 end)
 
@@ -284,6 +287,22 @@ infStatusLbl.TextColor3 = Color3.fromRGB(150,100,255)
 infStatusLbl.Font = "GothamBold"
 infStatusLbl.TextSize = 10
 infStatusLbl.TextXAlignment = "Left"
+
+-- RESET ABUSE
+local resetBtn = makeBtn("🔄 Reset Abuse", Color3.fromRGB(200,100,0))
+resetBtn.MouseButton1Click:Connect(function()
+    getgenv().AbuseActive = false
+    abuse3Btn.Text = "🐉 Talon Abuse (Slot 3): OFF"
+    abuse3Btn.BackgroundColor3 = Color3.fromRGB(25,0,50)
+    abuse1Btn.Text = "🐉 Talon Abuse (Slot 1): OFF"
+    abuse1Btn.BackgroundColor3 = Color3.fromRGB(25,0,50)
+    -- Matar al personaje para hacer respawn limpio
+    local char = lp.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then hrp.Anchored = false end
+    if hum then hum.Health = 0 end
+end)
 
 local fixBtn = makeBtn("🔧 Fix Camera", Color3.fromRGB(100,50,255))
 fixBtn.MouseButton1Click:Connect(function()
