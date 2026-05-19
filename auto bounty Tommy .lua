@@ -3,13 +3,13 @@ local function __run()
     local CONFIG = {
         Team           = _user.Team           or 'Pirates',
         MinLevel       = _user.MinLevel       or 100,
-        NoHitTimeout   = _user.NoHitTimeout   or 40,
-        HopMinPlayers  = _user.HopMinPlayers  or 8,
-        HopMaxPlayers  = _user.HopMaxPlayers  or 11,
+        NoHitTimeout   = _user.NoHitTimeout   or 15,
+        HopMinPlayers  = _user.HopMinPlayers  or 6,
+        HopMaxPlayers  = _user.HopMaxPlayers  or 10,
         HopRegion      = _user.HopRegion,
         HopFallbackAny = (_user.HopFallbackAny ~= nil) and _user.HopFallbackAny or true,
         MaxServerTime  = _user.MaxServerTime  or 0,
-        Theme          = _user.Theme          or 'Red',
+        Theme          = _user.Theme          or 'Default',
     }
 
     local Players           = game:GetService('Players')
