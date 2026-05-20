@@ -1,362 +1,891 @@
+--[[
+    ╔══════════════════════════════════════════════════════════════════════════╗
+    ║                                                                          ║
+    ║     ███████╗ █████╗  ██████╗██████╗ ███████╗██████╗ ██████╗ ██████╗     ║
+    ║     ██╔════╝██╔══██╗██╔════╝██╔══██╗██╔════╝██╔══██╗██╔══██╗██╔══██╗    ║
+    ║     ███████╗███████║██║     ██████╔╝█████╗  ██║  ██║██████╔╝██████╔╝    ║
+    ║     ╚════██║██╔══██║██║     ██╔══██╗██╔══╝  ██║  ██║██╔══██╗██╔══██╗    ║
+    ║     ███████║██║  ██║╚██████╗██║  ██║███████╗██████╔╝██║  ██║██║  ██║    ║
+    ║     ╚══════╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝    ║
+    ║                                                                          ║
+    ║              SACRED BOUNTY + ABUSE INF RANGE - ULTIMATE                  ║
+    ║                        VERSIÓN COMPLETA CON BOTONES                      ║
+    ║                                                                          ║
+    ╚══════════════════════════════════════════════════════════════════════════╝
+--]]
+
+-- ==================== CONFIGURACIÓN ====================
+local _user = getgenv and getgenv().SacredBountyConfig or {}
+local CONFIG = {
+    Team = _user.Team or "Pirates",
+    Weapon = _user.Weapon or "Dragon Heart",
+    MinLevel = _user.MinLevel or 0,
+    NoHitTimeout = _user.NoHitTimeout or 15,
+    HopMinPlayers = _user.HopMinPlayers or 4,
+    HopMaxPlayers = _user.HopMaxPlayers or 12,
+    HopRegion = _user.HopRegion,
+    HopFallbackAny = (_user.HopFallbackAny ~= nil) and _user.HopFallbackAny or true,
+    MaxServerTime = _user.MaxServerTime or 0,
+    Theme = _user.Theme or "Cyan",
+    AbuseSlot = 3,  -- 1, 2 o 3 para la habilidad de abuso
+}
+
+-- ==================== SERVICIOS ====================
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
 local VIM = game:GetService("VirtualInputManager")
-local lp = Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
-getgenv().AbuseActive   = false
-getgenv().SelectedSlot  = Enum.KeyCode.Three
-getgenv().InfAutoActive = false
-getgenv().CombatStyle   = "Melee"
+local player = Players.LocalPlayer
+local UP_SPEED = 1e35
+local orbitSpeed = 500
+local angle = 0
 
-local function Press(key)
-    VIM:SendKeyEvent(true, key, false, game)
-    task.wait(0.01)
-    VIM:SendKeyEvent(false, key, false, game)
+-- ==================== ESTADO ====================
+local State = {
+    active = false,
+    enabledCielo = false,
+    autoHaki = false,
+    respawnAbuse = false,
+    lastHitTime = os.clock(),
+    lastZTime = 0,
+    serverJoinTime = os.clock(),
+    sessionEarned = 0,
+    startBounty = 0,
+    currentBounty = 0,
+    kills = 0,
+    status = "Esperando...",
+    factionOK = false,
+}
+
+local AbuseState = {
+    active = false,
+    selectedSlot = Enum.KeyCode[CONFIG.AbuseSlot == 1 and "One" or CONFIG.AbuseSlot == 2 and "Two" or "Three"],
+}
+
+-- ==================== REMOTES ====================
+local CommF_, CommE_
+pcall(function()
+    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+    if remotes then
+        CommF_ = remotes:FindFirstChild("CommF_")
+        CommE_ = remotes:FindFirstChild("CommE")
+    end
+end)
+
+-- ==================== UTILIDADES ====================
+local function fmt(n)
+    if not n then return "0" end
+    n = math.floor(n)
+    if n >= 1e9 then return string.format("%.2fB", n / 1e9)
+    elseif n >= 1e6 then return string.format("%.2fM", n / 1e6)
+    elseif n >= 1e3 then return string.format("%.1fK", n / 1e3)
+    end
+    return tostring(n)
 end
 
-local function AutoHaki()
+local function getBounty()
+    local val = 0
     pcall(function()
-        ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_"):InvokeServer("Buso")
+        local d = player:FindFirstChild("Data")
+        if d then
+            local b = d:FindFirstChild("Bounty") or d:FindFirstChild("Honor") or d:FindFirstChild("Rep")
+            if b and type(b.Value) == "number" then val = b.Value; return end
+        end
+        local ls = player:FindFirstChild("leaderstats")
+        if ls then
+            local b = ls:FindFirstChild("Bounty/Honor") or ls:FindFirstChild("Bounty") or ls:FindFirstChild("Honor")
+            if b and type(b.Value) == "number" then val = b.Value end
+        end
+    end)
+    return val
+end
+
+local function PressKey(key)
+    pcall(function()
+        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        VIM:SendKeyEvent(true, key, false, hrp or game)
+        task.wait(0.01)
+        VIM:SendKeyEvent(false, key, false, hrp or game)
     end)
 end
 
-local function EquipCombat()
+-- ==================== INF RANGE ABUSE (MEJORADO) ====================
+local function ExecuteAbuse()
+    if not AbuseState.active then return end
+    
+    local char = player.Character or player.CharacterAdded:Wait()
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    
+    if hrp and hum and hum.Health > 0 then
+        pcall(function()
+            -- Subir al cielo
+            hrp.CFrame = hrp.CFrame * CFrame.new(0, 500, 0)
+            task.wait(0.05)
+            
+            -- Presionar tecla de habilidad
+            PressKey(AbuseState.selectedSlot)
+            task.wait(0.05)
+            
+            -- Presionar J (ataque)
+            PressKey(Enum.KeyCode.J)
+            
+            -- Teletransportar al infinito
+            local targetPos = CFrame.new(923.2, 1e21, 32852.8)
+            hrp.Anchored = true
+            hrp.CFrame = targetPos
+            Workspace.CurrentCamera.CFrame = targetPos
+            task.wait(0.05)
+            
+            -- Usar Z
+            PressKey(Enum.KeyCode.Z)
+            
+            -- Suicidio
+            task.spawn(function()
+                task.wait(0.03)
+                hum.Health = 0
+            end)
+            
+            task.wait(0.5)
+        end)
+    end
+end
+
+local function VoidSkill()
+    local char = player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        pcall(function()
+            local oldPos = hrp.CFrame
+            hrp.Anchored = true
+            hrp.CFrame = CFrame.new(923.2, 1e21, 32852.8)
+            Workspace.CurrentCamera.CFrame = hrp.CFrame
+            task.wait(0.1)
+            PressKey(Enum.KeyCode.Z)
+            task.wait(0.8)
+            hrp.CFrame = oldPos
+            Workspace.CurrentCamera.CameraSubject = char.Humanoid
+            hrp.Anchored = false
+        end)
+    end
+end
+
+-- ==================== AUTO BOUNTY ====================
+local function getAllTargets()
+    local targets = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= player and p.Character and p.Character:FindFirstChild("Humanoid") then
+            local hum = p.Character.Humanoid
+            if hum.Health > 0 then
+                table.insert(targets, p.Character)
+            end
+        end
+    end
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and not Players:FindFirstChild(obj.Name) then
+            local hum = obj.Humanoid
+            if hum.Health > 0 then
+                table.insert(targets, obj)
+            end
+        end
+    end
+    return targets
+end
+
+local function instaKill(target)
     pcall(function()
-        local char = lp.Character or lp.CharacterAdded:Wait()
+        local hum = target:FindFirstChild("Humanoid")
+        if hum and hum.Health > 0 then
+            hum.Health = 0
+            if CommE_ then
+                CommE_:FireServer("Damage", target, 999999)
+            end
+        end
+    end)
+end
+
+-- ==================== AUTO SERVER ====================
+local browser = ReplicatedStorage:FindFirstChild("__ServerBrowser")
+local isHopping = false
+local lastHopTime = 0
+local HOP_COOLDOWN = 5
+local placeId = game.PlaceId
+local currentJobId = game.JobId
+
+local function Hop()
+    if isHopping then return false end
+    if os.clock() - lastHopTime < HOP_COOLDOWN then return false end
+    
+    isHopping = true
+    lastHopTime = os.clock()
+    task.delay(10, function() isHopping = false end)
+    
+    local servers = {}
+    
+    pcall(function()
+        if browser then
+            for page = 1, 10 do
+                local result = browser:InvokeServer(page)
+                if type(result) == "table" then
+                    for uuid, info in pairs(result) do
+                        if uuid ~= currentJobId and info.Count then
+                            table.insert(servers, {uuid = uuid, count = info.Count or 0})
+                        end
+                    end
+                end
+                task.wait()
+            end
+        end
+    end)
+    
+    if #servers == 0 then
+        pcall(function()
+            local response = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Desc&limit=50"))
+            if response and response.data then
+                for _, sv in ipairs(response.data) do
+                    if sv.id ~= currentJobId and sv.playing then
+                        table.insert(servers, {uuid = sv.id, count = sv.playing})
+                    end
+                end
+            end
+        end)
+    end
+    
+    if #servers == 0 then return false end
+    
+    table.sort(servers, function(a, b) return a.count > b.count end)
+    local chosen = servers[math.random(1, math.min(5, #servers))]
+    
+    pcall(function()
+        if browser then
+            browser:InvokeServer("teleport", chosen.uuid)
+        end
+    end)
+    
+    return true
+end
+
+-- ==================== FUNCIONES BASE ====================
+local function equip(tooltip)
+    if not tooltip then return end
+    pcall(function()
+        local char = player.Character or player.CharacterAdded:Wait()
         local hum = char:FindFirstChildOfClass("Humanoid")
         if not hum then return end
-        for _, tool in pairs(lp.Backpack:GetChildren()) do
-            if tool:IsA("Tool") then
-                local style = getgenv().CombatStyle
-                local match = false
-                if style == "Melee" then
-                    match = tool.ToolTip == "Melee"
-                        or tool.Name:lower():find("fist")
-                        or tool.Name:lower():find("melee")
-                        or tool.Name:lower():find("combat")
-                elseif style == "Sword" then
-                    match = tool.ToolTip == "Sword"
-                        or tool.Name:lower():find("sword")
-                        or tool.Name:lower():find("katana")
-                        or tool.Name:lower():find("blade")
+        for _, tool in pairs(player.Backpack:GetChildren()) do
+            if tool:IsA("Tool") and (tool.ToolTip == tooltip or tool.Name:find(tooltip)) then
+                if not hum:IsDescendantOf(tool) then
+                    hum:EquipTool(tool)
+                    return
                 end
-                if match then hum:EquipTool(tool); return end
             end
         end
     end)
 end
 
-local function GetNearestPlayer()
-    local nearest, minDist = nil, math.huge
-    local myHRP = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return nil end
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= lp and p.Character then
-            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-            local hum = p.Character:FindFirstChild("Humanoid")
-            if hrp and hum and hum.Health > 0 then
-                local d = (myHRP.Position - hrp.Position).Magnitude
-                if d < minDist then minDist = d; nearest = p end
-            end
+local function buso()
+    pcall(function()
+        if CommF_ then
+            CommF_:InvokeServer("Buso")
+        end
+    end)
+end
+
+-- ==================== LOOP PRINCIPAL ====================
+task.spawn(function()
+    while task.wait(0.5) do
+        if State.autoHaki and State.active then
+            buso()
         end
     end
-    return nearest
-end
-
-local function ExecuteAbuse()
-    if not getgenv().AbuseActive then return end
-    local char = lp.Character or lp.CharacterAdded:Wait()
-    local hrp = char:WaitForChild("HumanoidRootPart", 10)
-    local hum = char:WaitForChild("Humanoid", 10)
-    if hrp and hum and hum.Health > 0 then
-        hrp.CFrame = hrp.CFrame * CFrame.new(0, 500, 0)
-        Press(getgenv().SelectedSlot)
-        task.wait(0.08)
-        Press(Enum.KeyCode.J)
-        local targetPos = CFrame.new(923.2, 3e21, 32852.8)
-        hrp.Anchored = true
-        hrp.CFrame = targetPos
-        workspace.CurrentCamera.CFrame = targetPos
-        task.wait(0.05)
-        Press(Enum.KeyCode.Z)
-        task.spawn(function() task.wait(0.03); hum.Health = 0 end)
-        local s = tick()
-        while tick() - s < 0.6 do RunService.Heartbeat:Wait() end
-    end
-end
-
-local function ExecuteInfAuto()
-    local char = lp.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not hum or hum.Health <= 0 then return end
-    AutoHaki()
-    EquipCombat()
-    task.wait(0.15)
-    local target = GetNearestPlayer()
-    local targetHRP = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
-    local oldPos = hrp.CFrame
-    hrp.Anchored = true
-    if targetHRP then
-        local tPos = targetHRP.Position
-        hrp.CFrame = CFrame.lookAt(
-            Vector3.new(tPos.X, tPos.Y+15, tPos.Z+5),
-            Vector3.new(tPos.X, tPos.Y, tPos.Z)
-        )
-    else
-        hrp.CFrame = CFrame.new(923.2, 3e21, 32852.8)
-    end
-    workspace.CurrentCamera.CFrame = hrp.CFrame
-    task.wait(0.1)
-    Press(Enum.KeyCode.Z)
-    task.wait(0.6)
-    hrp.CFrame = oldPos
-    hrp.Anchored = false
-    pcall(function() workspace.CurrentCamera.CameraSubject = hum end)
-end
-
-task.spawn(function()
-    while true do
-        task.wait(0.05)
-        if getgenv().InfAutoActive then pcall(ExecuteInfAuto) end
-    end
 end)
+
 task.spawn(function()
-    while true do
-        task.wait(0.8)
-        if getgenv().InfAutoActive then AutoHaki() end
+    while task.wait() do
+        if not State.respawnAbuse or not State.active then
+            task.wait()
+            continue
+        end
+        
+        local char = player.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        
+        if root then
+            angle = angle + math.rad(orbitSpeed)
+            root.CFrame = root.CFrame * CFrame.new(math.cos(angle) * 3, 0, math.sin(angle) * 3)
+        end
+        
+        -- Equipar y atacar
+        equip(CONFIG.Weapon)
+        task.wait(0.1)
+        
+        -- Atacar a todos los objetivos
+        local targets = getAllTargets()
+        for _, target in ipairs(targets) do
+            instaKill(target)
+        end
+        
+        PressKey(Enum.KeyCode.Z)
+        
+        if char and char:FindFirstChild("Humanoid") then
+            char.Humanoid.Health = 0
+        end
+        
+        player.CharacterAdded:Wait()
+        task.wait(0.3)
     end
 end)
 
--- GUI
-local pgui = lp:WaitForChild("PlayerGui")
-if pgui:FindFirstChild("TommyHub") then pgui.TommyHub:Destroy() end
-local screenGui = Instance.new("ScreenGui", pgui)
-screenGui.Name = "TommyHub"
-screenGui.ResetOnSpawn = false
+-- ==================== ABUSE LOOP ====================
+task.spawn(function()
+    while task.wait(0.2) do
+        if AbuseState.active then
+            ExecuteAbuse()
+        end
+    end
+end)
 
-local MainFrame = Instance.new("Frame", screenGui)
-MainFrame.Size = UDim2.new(0,220,0,460)
-MainFrame.Position = UDim2.new(0.5,-110,0.5,-230)
-MainFrame.BackgroundColor3 = Color3.fromRGB(10,0,20)
+-- ==================== VUELO INFINITO ====================
+RunService.RenderStepped:Connect(function(dt)
+    if not State.enabledCielo or not State.active then return end
+    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if root then
+        root.CFrame = root.CFrame + Vector3.new(0, UP_SPEED * dt, 0)
+    end
+end)
+
+-- ==================== DETECCIÓN DE BOUNTY ====================
+local SAVE_FILE = "sacred_ultimate.json"
+
+local function saveData()
+    pcall(function()
+        writefile(SAVE_FILE, HttpService:JSONEncode({
+            sessionEarned = State.sessionEarned,
+            startBounty = State.startBounty,
+            kills = State.kills,
+        }))
+    end)
+end
+
+local function loadData()
+    pcall(function()
+        if isfile and isfile(SAVE_FILE) then
+            local d = HttpService:JSONDecode(readfile(SAVE_FILE))
+            if d then
+                State.sessionEarned = d.sessionEarned or 0
+                State.startBounty = d.startBounty or getBounty()
+                State.kills = d.kills or 0
+                return
+            end
+        end
+        State.startBounty = getBounty()
+    end)
+end
+
+pcall(function()
+    if CommE_ then
+        CommE_.OnClientEvent:Connect(function(event, ...)
+            if not State.active then return end
+            if event ~= "Notify" then return end
+            local msg = select(1, ...) or ""
+            if msg:find("Bounty") or msg:find("Honor") then
+                local earned = tonumber(string.match(msg, ">(%d+)")) or 0
+                State.sessionEarned = State.sessionEarned + earned
+                State.kills = State.kills + 1
+                State.lastHitTime = os.clock()
+                State.currentBounty = getBounty()
+                saveData()
+            end
+        end)
+    end
+end)
+
+-- ==================== AUTO SERVER LOOP ====================
+task.spawn(function()
+    while task.wait(1) do
+        if not State.active then continue end
+        
+        local sinceHit = os.clock() - State.lastHitTime
+        if sinceHit >= CONFIG.NoHitTimeout then
+            State.status = "🔄 HOPEANDO... 🔄"
+            for i = 1, 5 do
+                if Hop() then break end
+                task.wait(4)
+            end
+            State.serverJoinTime = os.clock()
+            State.lastHitTime = os.clock()
+            State.status = "⚔️ ACTIVO ⚔️"
+        end
+    end
+end)
+
+-- ==================== SELECCIÓN DE FACCIÓN ====================
+local function selectFaction(faction)
+    pcall(function()
+        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+        if not remotes then return end
+        local activity = remotes:FindFirstChild("RE/OnEventServiceActivity")
+        if activity then
+            activity:FireServer("TeamSelect/Team/" .. faction)
+        end
+        task.wait(0.05)
+        if CommF_ then
+            CommF_:InvokeServer("SetTeam", faction)
+        end
+    end)
+end
+
+local function startAll()
+    loadData()
+    State.active = true
+    State.enabledCielo = true
+    State.autoHaki = true
+    State.respawnAbuse = true
+    State.lastHitTime = os.clock()
+    State.currentBounty = getBounty()
+    State.status = "⚔️ ACTIVO ⚔️"
+    print("[SACRED] ULTIMATE EDITION ACTIVADA")
+end
+
+-- ==================== UI MODERNA CON BOTONES ====================
+local THEMES = {
+    Default = {accent = Color3.fromRGB(210, 215, 225), bg = Color3.fromRGB(9, 9, 11), panel = Color3.fromRGB(14, 14, 16), card = Color3.fromRGB(17, 17, 20)},
+    Red = {accent = Color3.fromRGB(230, 60, 60), bg = Color3.fromRGB(14, 7, 7), panel = Color3.fromRGB(18, 10, 10), card = Color3.fromRGB(20, 12, 12)},
+    Cyan = {accent = Color3.fromRGB(0, 190, 240), bg = Color3.fromRGB(8, 10, 20), panel = Color3.fromRGB(10, 13, 25), card = Color3.fromRGB(12, 15, 28)},
+    Green = {accent = Color3.fromRGB(50, 220, 100), bg = Color3.fromRGB(7, 13, 8), panel = Color3.fromRGB(9, 17, 10), card = Color3.fromRGB(10, 19, 12)},
+    Purple = {accent = Color3.fromRGB(170, 80, 255), bg = Color3.fromRGB(11, 7, 18), panel = Color3.fromRGB(14, 9, 22), card = Color3.fromRGB(16, 11, 26)},
+}
+
+local THEME = THEMES[CONFIG.Theme] or THEMES.Cyan
+local T_ACCENT = THEME.accent
+local T_BG = THEME.bg
+local T_PANEL = THEME.panel
+local T_CARD = THEME.card
+
+local C = {
+    bg = T_BG, panel = T_PANEL, card = T_CARD,
+    border = T_ACCENT:Lerp(Color3.fromRGB(5, 5, 10), 0.75),
+    green = Color3.fromRGB(45, 210, 110), red = Color3.fromRGB(215, 60, 60),
+    gold = Color3.fromRGB(240, 185, 55), text = Color3.fromRGB(220, 225, 245),
+    muted = Color3.fromRGB(90, 100, 135),
+}
+
+-- Limpiar UI anterior
+for _, parent in ipairs({player.PlayerGui, game:GetService("CoreGui")}) do
+    pcall(function() parent:FindFirstChild("SacredUltimateUI"):Destroy() end)
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "SacredUltimateUI"
+ScreenGui.ResetOnSpawn = false
+pcall(function() ScreenGui.Parent = game:GetService("CoreGui") end)
+if not ScreenGui.Parent then ScreenGui.Parent = player:WaitForChild("PlayerGui") end
+
+-- Frame principal (arrastrable)
+local MainFrame = Instance.new("Frame")
+MainFrame.Parent = ScreenGui
+MainFrame.Size = UDim2.new(0, 380, 0, 520)
+MainFrame.Position = UDim2.new(0.5, -190, 0.5, -260)
+MainFrame.BackgroundColor3 = T_BG
+MainFrame.BackgroundTransparency = 0
 MainFrame.BorderSizePixel = 0
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0,12)
-local mStroke = Instance.new("UIStroke", MainFrame)
-mStroke.Color = Color3.fromRGB(160,0,255)
-mStroke.Thickness = 2
+MainFrame.Active = true
 
-local TitleBar = Instance.new("Frame", MainFrame)
-TitleBar.Size = UDim2.new(1,0,0,36)
-TitleBar.BackgroundColor3 = Color3.fromRGB(20,0,40)
+local MainCorner = Instance.new("UICorner")
+MainCorner.Parent = MainFrame
+MainCorner.CornerRadius = UDim.new(0, 12)
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Parent = MainFrame
+MainStroke.Color = T_ACCENT
+MainStroke.Thickness = 1.5
+
+-- Barra de título para arrastrar
+local TitleBar = Instance.new("Frame")
+TitleBar.Parent = MainFrame
+TitleBar.Size = UDim2.new(1, 0, 0, 45)
+TitleBar.BackgroundColor3 = T_PANEL
 TitleBar.BorderSizePixel = 0
-Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0,12)
 
-local avImg = Instance.new("ImageLabel", TitleBar)
-avImg.Size = UDim2.new(0,26,0,26)
-avImg.Position = UDim2.new(0,5,0.5,-13)
-avImg.BackgroundTransparency = 1
-avImg.ScaleType = Enum.ScaleType.Crop
-Instance.new("UICorner", avImg).CornerRadius = UDim.new(1,0)
-task.spawn(function()
-    local ok, url = pcall(function()
-        return Players:GetUserThumbnailAsync(lp.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
-    end)
-    if ok then avImg.Image = url end
-end)
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.Parent = TitleBar
+TitleCorner.CornerRadius = UDim.new(0, 12)
 
-local titleLbl = Instance.new("TextLabel", TitleBar)
-titleLbl.Size = UDim2.new(1,-90,1,0)
-titleLbl.Position = UDim2.new(0,36,0,0)
-titleLbl.Text = "TOMMY HUB"
-titleLbl.TextColor3 = Color3.fromRGB(160,0,255)
-titleLbl.Font = "GothamBlack"
-titleLbl.TextSize = 13
-titleLbl.BackgroundTransparency = 1
-titleLbl.TextXAlignment = "Left"
+local Title = Instance.new("TextLabel")
+Title.Parent = TitleBar
+Title.Size = UDim2.new(0.7, 0, 1, 0)
+Title.Position = UDim2.new(0, 15, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "🔥 SACRED ULTIMATE 🔥"
+Title.TextColor3 = T_ACCENT
+Title.TextSize = 16
+Title.Font = Enum.Font.GothamBlack
+Title.TextXAlignment = Enum.TextXAlignment.Left
 
-local MinBtn = Instance.new("TextButton", TitleBar)
-MinBtn.Size = UDim2.new(0,26,0,26)
-MinBtn.Position = UDim2.new(1,-30,0.5,-13)
-MinBtn.BackgroundColor3 = Color3.fromRGB(180,0,0)
+local SubTitle = Instance.new("TextLabel")
+SubTitle.Parent = TitleBar
+SubTitle.Size = UDim2.new(0.7, 0, 0, 16)
+SubTitle.Position = UDim2.new(0, 15, 0, 26)
+SubTitle.BackgroundTransparency = 1
+SubTitle.Text = "BOUNTY + ABUSE INF RANGE"
+SubTitle.TextColor3 = C.muted
+SubTitle.TextSize = 9
+SubTitle.Font = Enum.Font.Gotham
+SubTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Botón minimizar
+local MinBtn = Instance.new("TextButton")
+MinBtn.Parent = TitleBar
+MinBtn.Size = UDim2.new(0, 35, 0, 35)
+MinBtn.Position = UDim2.new(1, -45, 0.5, -17.5)
+MinBtn.BackgroundColor3 = Color3.fromRGB(80, 30, 30)
 MinBtn.Text = "−"
-MinBtn.TextColor3 = Color3.new(1,1,1)
-MinBtn.Font = "GothamBold"
-MinBtn.TextSize = 16
+MinBtn.TextColor3 = Color3.new(1, 1, 1)
+MinBtn.TextSize = 20
+MinBtn.Font = Enum.Font.GothamBold
 MinBtn.BorderSizePixel = 0
-Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0,6)
 
-local ContentFrame = Instance.new("ScrollingFrame", MainFrame)
-ContentFrame.Size = UDim2.new(1,0,1,-40)
-ContentFrame.Position = UDim2.new(0,0,0,40)
-ContentFrame.BackgroundTransparency = 1
-ContentFrame.ScrollBarThickness = 3
-ContentFrame.ScrollBarImageColor3 = Color3.fromRGB(160,0,255)
-ContentFrame.CanvasSize = UDim2.new(0,0,0,560)
-ContentFrame.BorderSizePixel = 0
-local cfLayout = Instance.new("UIListLayout", ContentFrame)
-cfLayout.Padding = UDim.new(0,8)
-cfLayout.HorizontalAlignment = "Center"
-local cfPad = Instance.new("UIPadding", ContentFrame)
-cfPad.PaddingTop = UDim.new(0,8)
+local MinCorner = Instance.new("UICorner")
+MinCorner.Parent = MinBtn
+MinCorner.CornerRadius = UDim.new(0, 8)
 
-local minimized = false
-MinBtn.MouseButton1Click:Connect(function()
-    minimized = not minimized
-    ContentFrame.Visible = not minimized
-    MainFrame.Size = minimized and UDim2.new(0,220,0,36) or UDim2.new(0,220,0,460)
-    MinBtn.Text = minimized and "+" or "−"
-end)
+-- Panel de estadísticas
+local StatsPanel = Instance.new("Frame")
+StatsPanel.Parent = MainFrame
+StatsPanel.Size = UDim2.new(0.9, 0, 0, 70)
+StatsPanel.Position = UDim2.new(0.05, 0, 0, 55)
+StatsPanel.BackgroundColor3 = T_CARD
+StatsPanel.BorderSizePixel = 0
 
-local function makeBtn(txt, color)
-    local btn = Instance.new("TextButton", ContentFrame)
-    btn.Size = UDim2.new(0.9,0,0,38)
-    btn.BackgroundColor3 = Color3.fromRGB(25,0,50)
-    btn.Text = txt
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.Font = "GothamBold"
-    btn.TextSize = 12
+local StatsCorner = Instance.new("UICorner")
+StatsCorner.Parent = StatsPanel
+StatsCorner.CornerRadius = UDim.new(0, 10)
+
+local KillsLabel = Instance.new("TextLabel")
+KillsLabel.Parent = StatsPanel
+KillsLabel.Size = UDim2.new(0.33, 0, 0.5, 0)
+KillsLabel.Position = UDim2.new(0, 0, 0, 5)
+KillsLabel.BackgroundTransparency = 1
+KillsLabel.Text = "🔪 KILLS"
+KillsLabel.TextColor3 = C.muted
+KillsLabel.TextSize = 10
+KillsLabel.Font = Enum.Font.GothamBold
+
+local KillsValue = Instance.new("TextLabel")
+KillsValue.Parent = StatsPanel
+KillsValue.Size = UDim2.new(0.33, 0, 0.5, 0)
+KillsValue.Position = UDim2.new(0, 0, 0.5, 0)
+KillsValue.BackgroundTransparency = 1
+KillsValue.Text = "0"
+KillsValue.TextColor3 = C.red
+KillsValue.TextSize = 24
+KillsValue.Font = Enum.Font.GothamBlack
+
+local EarnedLabel = Instance.new("TextLabel")
+EarnedLabel.Parent = StatsPanel
+EarnedLabel.Size = UDim2.new(0.34, 0, 0.5, 0)
+EarnedLabel.Position = UDim2.new(0.33, 0, 0, 5)
+EarnedLabel.BackgroundTransparency = 1
+EarnedLabel.Text = "💰 GANADO"
+EarnedLabel.TextColor3 = C.muted
+EarnedLabel.TextSize = 10
+EarnedLabel.Font = Enum.Font.GothamBold
+
+local EarnedValue = Instance.new("TextLabel")
+EarnedValue.Parent = StatsPanel
+EarnedValue.Size = UDim2.new(0.34, 0, 0.5, 0)
+EarnedValue.Position = UDim2.new(0.33, 0, 0.5, 0)
+EarnedValue.BackgroundTransparency = 1
+EarnedValue.Text = "+0"
+EarnedValue.TextColor3 = C.green
+EarnedValue.TextSize = 20
+EarnedValue.Font = Enum.Font.GothamBlack
+
+local BountyLabel = Instance.new("TextLabel")
+BountyLabel.Parent = StatsPanel
+BountyLabel.Size = UDim2.new(0.33, 0, 0.5, 0)
+BountyLabel.Position = UDim2.new(0.67, 0, 0, 5)
+BountyLabel.BackgroundTransparency = 1
+BountyLabel.Text = "🏆 BOUNTY"
+BountyLabel.TextColor3 = C.muted
+BountyLabel.TextSize = 10
+BountyLabel.Font = Enum.Font.GothamBold
+
+local BountyValue = Instance.new("TextLabel")
+BountyValue.Parent = StatsPanel
+BountyValue.Size = UDim2.new(0.33, 0, 0.5, 0)
+BountyValue.Position = UDim2.new(0.67, 0, 0.5, 0)
+BountyValue.BackgroundTransparency = 1
+BountyValue.Text = "0"
+BountyValue.TextColor3 = T_ACCENT
+BountyValue.TextSize = 20
+BountyValue.Font = Enum.Font.GothamBlack
+
+-- Panel de estado
+local StatusFrame = Instance.new("Frame")
+StatusFrame.Parent = MainFrame
+StatusFrame.Size = UDim2.new(0.9, 0, 0, 35)
+StatusFrame.Position = UDim2.new(0.05, 0, 0, 135)
+StatusFrame.BackgroundColor3 = T_CARD
+StatusFrame.BorderSizePixel = 0
+
+local StatusCorner = Instance.new("UICorner")
+StatusCorner.Parent = StatusFrame
+StatusCorner.CornerRadius = UDim.new(0, 8)
+
+local StatusDot = Instance.new("Frame")
+StatusDot.Parent = StatusFrame
+StatusDot.Size = UDim2.new(0, 8, 0, 8)
+StatusDot.Position = UDim2.new(0, 12, 0.5, -4)
+StatusDot.BackgroundColor3 = C.green
+StatusDot.BorderSizePixel = 0
+
+local StatusDotCorner = Instance.new("UICorner")
+StatusDotCorner.Parent = StatusDot
+StatusDotCorner.CornerRadius = UDim.new(1, 0)
+
+local StatusText = Instance.new("TextLabel")
+StatusText.Parent = StatusFrame
+StatusText.Size = UDim2.new(0.8, 0, 1, 0)
+StatusText.Position = UDim2.new(0, 28, 0, 0)
+StatusText.BackgroundTransparency = 1
+StatusText.Text = "⚔️ INACTIVO ⚔️"
+StatusText.TextColor3 = C.text
+StatusText.TextSize = 12
+StatusText.Font = Enum.Font.Gotham
+StatusText.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Barra de tiempo
+local TimerBg = Instance.new("Frame")
+TimerBg.Parent = MainFrame
+TimerBg.Size = UDim2.new(0.9, 0, 0, 10)
+TimerBg.Position = UDim2.new(0.05, 0, 0, 180)
+TimerBg.BackgroundColor3 = Color3.fromRGB(25, 28, 35)
+TimerBg.BorderSizePixel = 0
+
+local TimerBgCorner = Instance.new("UICorner")
+TimerBgCorner.Parent = TimerBg
+TimerBgCorner.CornerRadius = UDim.new(0, 5)
+
+local TimerBar = Instance.new("Frame")
+TimerBar.Parent = TimerBg
+TimerBar.Size = UDim2.new(1, 0, 1, 0)
+TimerBar.BackgroundColor3 = T_ACCENT
+TimerBar.BorderSizePixel = 0
+
+local TimerBarCorner = Instance.new("UICorner")
+TimerBarCorner.Parent = TimerBar
+TimerBarCorner.CornerRadius = UDim.new(0, 5)
+
+local TimerText = Instance.new("TextLabel")
+TimerText.Parent = TimerBg
+TimerText.Size = UDim2.new(1, 0, 1, 0)
+TimerText.BackgroundTransparency = 1
+TimerText.Text = "15s"
+TimerText.TextColor3 = Color3.new(1, 1, 1)
+TimerText.TextSize = 8
+TimerText.Font = Enum.Font.GothamBold
+
+-- ==================== BOTONES ====================
+local function CreateButton(parent, text, yPos, bgColor, callback)
+    local btn = Instance.new("TextButton")
+    btn.Parent = parent
+    btn.Size = UDim2.new(0.85, 0, 0, 42)
+    btn.Position = UDim2.new(0.075, 0, 0, yPos)
+    btn.BackgroundColor3 = bgColor
+    btn.Text = text
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.TextSize = 13
+    btn.Font = Enum.Font.GothamBold
     btn.BorderSizePixel = 0
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,8)
-    local s = Instance.new("UIStroke", btn)
-    s.Color = color
-    s.Thickness = 2
+    
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.Parent = btn
+    btnCorner.CornerRadius = UDim.new(0, 8)
+    
+    btn.MouseButton1Click:Connect(callback)
     return btn
 end
 
-local abuse3Btn = makeBtn("🐉 Talon Abuse (Slot 3): OFF", Color3.fromRGB(120,0,200))
-abuse3Btn.MouseButton1Click:Connect(function()
-    getgenv().SelectedSlot = Enum.KeyCode.Three
-    getgenv().AbuseActive = not getgenv().AbuseActive
-    abuse3Btn.Text = getgenv().AbuseActive and "🐉 Talon Abuse (Slot 3): ON" or "🐉 Talon Abuse (Slot 3): OFF"
-    abuse3Btn.BackgroundColor3 = getgenv().AbuseActive and Color3.fromRGB(80,0,160) or Color3.fromRGB(25,0,50)
-    if getgenv().AbuseActive then task.spawn(ExecuteAbuse) end
+-- Botón Auto Bounty
+local BountyBtn = CreateButton(MainFrame, "🔴 AUTO BOUNTY", 200, Color3.fromRGB(150, 0, 0), function()
+    if State.active then
+        State.active = false
+        BountyBtn.Text = "🔴 AUTO BOUNTY"
+        BountyBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+        StatusText.Text = "⚔️ INACTIVO ⚔️"
+        StatusDot.BackgroundColor3 = C.red
+        print("[!] Auto Bounty DESACTIVADO")
+    else
+        startAll()
+        selectFaction(CONFIG.Team)
+        BountyBtn.Text = "🟢 AUTO BOUNTY (ACTIVO)"
+        BountyBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+        StatusText.Text = "⚔️ ACTIVO ⚔️"
+        StatusDot.BackgroundColor3 = C.green
+        print("[✓] Auto Bounty ACTIVADO")
+    end
 end)
 
-local abuse1Btn = makeBtn("🐉 Talon Abuse (Slot 1): OFF", Color3.fromRGB(120,0,200))
-abuse1Btn.MouseButton1Click:Connect(function()
-    getgenv().SelectedSlot = Enum.KeyCode.One
-    getgenv().AbuseActive = not getgenv().AbuseActive
-    abuse1Btn.Text = getgenv().AbuseActive and "🐉 Talon Abuse (Slot 1): ON" or "🐉 Talon Abuse (Slot 1): OFF"
-    abuse1Btn.BackgroundColor3 = getgenv().AbuseActive and Color3.fromRGB(80,0,160) or Color3.fromRGB(25,0,50)
-    if getgenv().AbuseActive then task.spawn(ExecuteAbuse) end
+-- Botón Abuse Inf Range
+local AbuseBtn = CreateButton(MainFrame, "🔴 ABUSE INF RANGE", 252, Color3.fromRGB(100, 0, 150), function()
+    AbuseState.active = not AbuseState.active
+    if AbuseState.active then
+        AbuseBtn.Text = "🟢 ABUSE INF RANGE (ACTIVO)"
+        AbuseBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+        print("[✓] Abuse Inf Range ACTIVADO")
+    else
+        AbuseBtn.Text = "🔴 ABUSE INF RANGE"
+        AbuseBtn.BackgroundColor3 = Color3.fromRGB(100, 0, 150)
+        print("[!] Abuse Inf Range DESACTIVADO")
+    end
 end)
 
-local infBtn = makeBtn("⚡ INF Auto: OFF", Color3.fromRGB(100,0,200))
-infBtn.MouseButton1Click:Connect(function()
-    getgenv().InfAutoActive = not getgenv().InfAutoActive
-    infBtn.Text = getgenv().InfAutoActive and "⚡ INF Auto: ON" or "⚡ INF Auto: OFF"
-    infBtn.BackgroundColor3 = getgenv().InfAutoActive and Color3.fromRGB(80,0,160) or Color3.fromRGB(25,0,50)
+-- Botón Void Skill
+local VoidBtn = CreateButton(MainFrame, "🌌 VOID SKILL (INF)", 304, Color3.fromRGB(0, 100, 150), function()
+    VoidSkill()
+    StatusText.Text = "🌌 VOID SKILL EJECUTADO"
+    task.delay(1.5, function()
+        if State.active then
+            StatusText.Text = "⚔️ ACTIVO ⚔️"
+        else
+            StatusText.Text = "⚔️ INACTIVO ⚔️"
+        end
+    end)
 end)
 
--- Selector Melee / Sword
-local styleRow = Instance.new("Frame", ContentFrame)
-styleRow.Size = UDim2.new(0.9,0,0,34)
-styleRow.BackgroundTransparency = 1
-local srLayout = Instance.new("UIListLayout", styleRow)
-srLayout.FillDirection = "Horizontal"
-srLayout.Padding = UDim.new(0,6)
-srLayout.HorizontalAlignment = "Center"
-
-local meleeBtn = Instance.new("TextButton", styleRow)
-meleeBtn.Size = UDim2.new(0,90,0,30)
-meleeBtn.BackgroundColor3 = Color3.fromRGB(0,80,30)
-meleeBtn.Text = "👊 Melee"
-meleeBtn.TextColor3 = Color3.fromRGB(80,255,140)
-meleeBtn.Font = "GothamBold"
-meleeBtn.TextSize = 11
-meleeBtn.BorderSizePixel = 0
-Instance.new("UICorner", meleeBtn).CornerRadius = UDim.new(0,8)
-
-local swordBtn = Instance.new("TextButton", styleRow)
-swordBtn.Size = UDim2.new(0,90,0,30)
-swordBtn.BackgroundColor3 = Color3.fromRGB(30,20,0)
-swordBtn.Text = "⚔️ Sword"
-swordBtn.TextColor3 = Color3.fromRGB(150,150,150)
-swordBtn.Font = "GothamBold"
-swordBtn.TextSize = 11
-swordBtn.BorderSizePixel = 0
-Instance.new("UICorner", swordBtn).CornerRadius = UDim.new(0,8)
-
-local infStatusLbl = Instance.new("TextLabel", ContentFrame)
-infStatusLbl.Size = UDim2.new(0.9,0,0,16)
-infStatusLbl.BackgroundTransparency = 1
-infStatusLbl.Text = "● Melee + Haki armadura auto"
-infStatusLbl.TextColor3 = Color3.fromRGB(150,100,255)
-infStatusLbl.Font = "GothamBold"
-infStatusLbl.TextSize = 10
-infStatusLbl.TextXAlignment = "Left"
-
--- RESET ABUSE
-local resetBtn = makeBtn("🔄 Reset Abuse", Color3.fromRGB(200,100,0))
-resetBtn.MouseButton1Click:Connect(function()
-    getgenv().AbuseActive = false
-    abuse3Btn.Text = "🐉 Talon Abuse (Slot 3): OFF"
-    abuse3Btn.BackgroundColor3 = Color3.fromRGB(25,0,50)
-    abuse1Btn.Text = "🐉 Talon Abuse (Slot 1): OFF"
-    abuse1Btn.BackgroundColor3 = Color3.fromRGB(25,0,50)
-    -- Matar al personaje para hacer respawn limpio
-    local char = lp.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if hrp then hrp.Anchored = false end
-    if hum then hum.Health = 0 end
+-- Botón Facción
+local FactionBtn = CreateButton(MainFrame, "🏴‍☠️ SELECCIONAR " .. CONFIG.Team, 356, Color3.fromRGB(30, 80, 120), function()
+    selectFaction(CONFIG.Team)
+    FactionBtn.Text = "✅ " .. CONFIG.Team .. " SELECCIONADO"
+    task.delay(1.5, function()
+        FactionBtn.Text = "🏴‍☠️ SELECCIONAR " .. CONFIG.Team
+    end)
 end)
 
-local fixBtn = makeBtn("🔧 Fix Camera", Color3.fromRGB(100,50,255))
-fixBtn.MouseButton1Click:Connect(function()
-    getgenv().AbuseActive = false
-    getgenv().InfAutoActive = false
-    abuse3Btn.Text = "🐉 Talon Abuse (Slot 3): OFF"
-    abuse3Btn.BackgroundColor3 = Color3.fromRGB(25,0,50)
-    abuse1Btn.Text = "🐉 Talon Abuse (Slot 1): OFF"
-    abuse1Btn.BackgroundColor3 = Color3.fromRGB(25,0,50)
-    infBtn.Text = "⚡ INF Auto: OFF"
-    infBtn.BackgroundColor3 = Color3.fromRGB(25,0,50)
-    if lp.Character then
-        workspace.CurrentCamera.CameraSubject = lp.Character:FindFirstChildOfClass("Humanoid")
-        local hrp = lp.Character:FindFirstChild("HumanoidRootPart")
+-- Botón Fix Camera
+local FixBtn = CreateButton(MainFrame, "📷 FIX CAMERA", 408, Color3.fromRGB(40, 40, 50), function()
+    AbuseState.active = false
+    AbuseBtn.Text = "🔴 ABUSE INF RANGE"
+    AbuseBtn.BackgroundColor3 = Color3.fromRGB(100, 0, 150)
+    if player.Character then
+        Workspace.CurrentCamera.CameraSubject = player.Character.Humanoid
+        local hrp = player.Character:FindFirstChild("HumanoidRootPart")
         if hrp then hrp.Anchored = false end
     end
+    StatusText.Text = "📷 CAMARA RESTAURADA"
+    task.delay(1.5, function()
+        if State.active then
+            StatusText.Text = "⚔️ ACTIVO ⚔️"
+        else
+            StatusText.Text = "⚔️ INACTIVO ⚔️"
+        end
+    end)
 end)
 
-local function UpdateStyleBtns()
-    if getgenv().CombatStyle == "Melee" then
-        meleeBtn.BackgroundColor3 = Color3.fromRGB(0,80,30)
-        meleeBtn.TextColor3 = Color3.fromRGB(80,255,140)
-        swordBtn.BackgroundColor3 = Color3.fromRGB(30,20,0)
-        swordBtn.TextColor3 = Color3.fromRGB(150,150,150)
-        infStatusLbl.Text = "● Melee + Haki armadura auto"
+-- ==================== DRAG & DROP ====================
+local dragging = false
+local dragStart
+local frameStart
+
+TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        frameStart = MainFrame.Position
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(frameStart.X.Scale, frameStart.X.Offset + delta.X, frameStart.Y.Scale, frameStart.Y.Offset + delta.Y)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+-- Minimizar
+local minimized = false
+MinBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    if minimized then
+        MainFrame:TweenSize(UDim2.new(0, 380, 0, 45), "Out", "Quad", 0.2, true)
+        MinBtn.Text = "+"
+        for _, child in ipairs(MainFrame:GetChildren()) do
+            if child ~= TitleBar and child ~= MainStroke then
+                child.Visible = false
+            end
+        end
+        TitleBar.Size = UDim2.new(1, 0, 0, 45)
     else
-        swordBtn.BackgroundColor3 = Color3.fromRGB(80,60,0)
-        swordBtn.TextColor3 = Color3.fromRGB(255,200,80)
-        meleeBtn.BackgroundColor3 = Color3.fromRGB(10,5,20)
-        meleeBtn.TextColor3 = Color3.fromRGB(150,150,150)
-        infStatusLbl.Text = "● Sword + Haki armadura auto"
-    end
-end
-
-meleeBtn.MouseButton1Click:Connect(function() getgenv().CombatStyle = "Melee"; UpdateStyleBtns() end)
-swordBtn.MouseButton1Click:Connect(function() getgenv().CombatStyle = "Sword"; UpdateStyleBtns() end)
-
-lp.CharacterAdded:Connect(function()
-    if getgenv().AbuseActive then task.wait(0.5); task.spawn(ExecuteAbuse) end
-end)
-
--- Draggable
-local d, ds, sp
-TitleBar.InputBegan:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-        d = true; ds = i.Position; sp = MainFrame.Position
-        i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then d = false end end)
-    end
-end)
-TitleBar.InputChanged:Connect(function(i)
-    if d and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
-        local delta = i.Position - ds
-        MainFrame.Position = UDim2.new(sp.X.Scale, sp.X.Offset+delta.X, sp.Y.Scale, sp.Y.Offset+delta.Y)
+        MainFrame:TweenSize(UDim2.new(0, 380, 0, 520), "Out", "Quad", 0.2, true)
+        MinBtn.Text = "−"
+        for _, child in ipairs(MainFrame:GetChildren()) do
+            if child ~= TitleBar and child ~= MainStroke then
+                child.Visible = true
+            end
+        end
     end
 end)
 
-UpdateStyleBtns()
+-- ==================== UPDATE UI ====================
+task.spawn(function()
+    while true do
+        task.wait(0.2)
+        pcall(function()
+            KillsValue.Text = tostring(State.kills)
+            EarnedValue.Text = "+" .. fmt(State.sessionEarned)
+            BountyValue.Text = fmt(getBounty())
+            
+            local sinceHit = os.clock() - State.lastHitTime
+            local remaining = math.max(0, CONFIG.NoHitTimeout - sinceHit)
+            TimerBar.Size = UDim2.new(remaining / CONFIG.NoHitTimeout, 0, 1, 0)
+            TimerText.Text = math.ceil(remaining) .. "s"
+        end)
+    end
+end)
+
+-- ==================== INICIALIZAR ====================
+print([[
+╔══════════════════════════════════════════════════════════════════════╗
+║                                                                      ║
+║     🔥 SACRED ULTIMATE - BOUNTY + ABUSE INF RANGE 🔥                ║
+║                                                                      ║
+╠══════════════════════════════════════════════════════════════════════╣
+║                                                                      ║
+║   ✅ SCRIPT CARGADO CORRECTAMENTE                                   ║
+║   ✅ USA LOS BOTONES PARA ACTIVAR LAS FUNCIONES                     ║
+║   ✅ PUEDES ARRASTRAR LA VENTANA                                    ║
+║   ✅ BOTÓN "−" PARA MINIMIZAR                                       ║
+║                                                                      ║
+╠══════════════════════════════════════════════════════════════════════╣
+║                                                                      ║
+║   🎮 FUNCIONES DISPONIBLES:                                         ║
+║   • AUTO BOUNTY - Farmeo automático de bounty/honor                 ║
+║   • ABUSE INF RANGE - Ataque infinito con habilidad especial       ║
+║   • VOID SKILL - Teletransporte y ataque infinito                  ║
+║   • SELECCIONAR FACCIÓN - Pirates o Marines                        ║
+║   • FIX CAMERA - Restaura la cámara y desancla                     ║
+║                                                                      ║
+╚══════════════════════════════════════════════════════════════════════╝
+]])
+
+-- Iniciar auto bounty automáticamente
+task.wait(1)
+startAll()
+selectFaction(CONFIG.Team)
+BountyBtn.Text = "🟢 AUTO BOUNTY (ACTIVO)"
+BountyBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+StatusText.Text = "⚔️ ACTIVO ⚔️"
+StatusDot.BackgroundColor3 = C.green
+print("[✓] Auto Bounty INICIADO AUTOMÁTICAMENTE")
