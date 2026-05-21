@@ -1,21 +1,22 @@
 --[[
     ╔══════════════════════════════════════════════════════════════════════════╗
+    ║  🇨🇴                                                                      ║
+    ║     ██╗   ██╗██╗██╗   ██╗ █████╗     ██████╗ ███████╗████████╗██████╗   ║
+    ║     ██║   ██║██║██║   ██║██╔══██╗    ██╔══██╗██╔════╝╚══██╔══╝██╔══██╗  ║
+    ║     ██║   ██║██║██║   ██║███████║    ██████╔╝█████╗     ██║   ██████╔╝  ║
+    ║     ╚██╗ ██╔╝██║╚██╗ ██╔╝██╔══██║    ██╔═══╝ ██╔══╝     ██║   ██╔══██╗  ║
+    ║      ╚████╔╝ ██║ ╚████╔╝ ██║  ██║    ██║     ███████╗   ██║   ██║  ██║  ║
+    ║       ╚═══╝  ╚═╝  ╚═══╝  ╚═╝  ╚═╝    ╚═╝     ╚══════╝   ╚═╝   ╚═╝  ╚═╝  ║
+    ║                                                                      🇨🇴 ║
     ║                                                                          ║
-    ║     ███████╗ █████╗  ██████╗██████╗ ███████╗██████╗ ██████╗ ██████╗     ║
-    ║     ██╔════╝██╔══██╗██╔════╝██╔══██╗██╔════╝██╔══██╗██╔══██╗██╔══██╗    ║
-    ║     ███████╗███████║██║     ██████╔╝█████╗  ██║  ██║██████╔╝██████╔╝    ║
-    ║     ╚════██║██╔══██║██║     ██╔══██╗██╔══╝  ██║  ██║██╔══██╗██╔══██╗    ║
-    ║     ███████║██║  ██║╚██████╗██║  ██║███████╗██████╔╝██║  ██║██║  ██║    ║
-    ║     ╚══════╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝    ║
-    ║                                                                          ║
-    ║              SACRED BOUNTY + ABUSE INF RANGE - ULTIMATE                  ║
+    ║              🇨🇴 VIVA PETRO - EL PODER DEL PUEBLO 🇨🇴                     ║
     ║                        VERSIÓN COMPLETA CON BOTONES                      ║
     ║                                                                          ║
     ╚══════════════════════════════════════════════════════════════════════════╝
 --]]
 
 -- ==================== CONFIGURACIÓN ====================
-local _user = getgenv and getgenv().SacredBountyConfig or {}
+local _user = getgenv and getgenv().VivaPetroConfig or {}
 local CONFIG = {
     Team = _user.Team or "Pirates",
     Weapon = _user.Weapon or "Dragon Heart",
@@ -27,7 +28,7 @@ local CONFIG = {
     HopFallbackAny = (_user.HopFallbackAny ~= nil) and _user.HopFallbackAny or true,
     MaxServerTime = _user.MaxServerTime or 0,
     Theme = _user.Theme or "Cyan",
-    AbuseSlot = 3,  -- 1, 2 o 3 para la habilidad de abuso
+    AbuseSlot = 3,
 }
 
 -- ==================== SERVICIOS ====================
@@ -58,7 +59,7 @@ local State = {
     startBounty = 0,
     currentBounty = 0,
     kills = 0,
-    status = "Esperando...",
+    status = "🇨🇴 VIVA PETRO 🇨🇴",
     factionOK = false,
 }
 
@@ -114,7 +115,7 @@ local function PressKey(key)
     end)
 end
 
--- ==================== INF RANGE ABUSE (MEJORADO) ====================
+-- ==================== INF RANGE ABUSE ====================
 local function ExecuteAbuse()
     if not AbuseState.active then return end
     
@@ -124,33 +125,21 @@ local function ExecuteAbuse()
     
     if hrp and hum and hum.Health > 0 then
         pcall(function()
-            -- Subir al cielo
             hrp.CFrame = hrp.CFrame * CFrame.new(0, 500, 0)
             task.wait(0.05)
-            
-            -- Presionar tecla de habilidad
             PressKey(AbuseState.selectedSlot)
             task.wait(0.05)
-            
-            -- Presionar J (ataque)
             PressKey(Enum.KeyCode.J)
-            
-            -- Teletransportar al infinito
             local targetPos = CFrame.new(923.2, 1e21, 32852.8)
             hrp.Anchored = true
             hrp.CFrame = targetPos
             Workspace.CurrentCamera.CFrame = targetPos
             task.wait(0.05)
-            
-            -- Usar Z
             PressKey(Enum.KeyCode.Z)
-            
-            -- Suicidio
             task.spawn(function()
                 task.wait(0.03)
                 hum.Health = 0
             end)
-            
             task.wait(0.5)
         end)
     end
@@ -320,11 +309,9 @@ task.spawn(function()
             root.CFrame = root.CFrame * CFrame.new(math.cos(angle) * 3, 0, math.sin(angle) * 3)
         end
         
-        -- Equipar y atacar
         equip(CONFIG.Weapon)
         task.wait(0.1)
         
-        -- Atacar a todos los objetivos
         local targets = getAllTargets()
         for _, target in ipairs(targets) do
             instaKill(target)
@@ -360,7 +347,7 @@ RunService.RenderStepped:Connect(function(dt)
 end)
 
 -- ==================== DETECCIÓN DE BOUNTY ====================
-local SAVE_FILE = "sacred_ultimate.json"
+local SAVE_FILE = "viva_petro_save.json"
 
 local function saveData()
     pcall(function()
@@ -419,7 +406,7 @@ task.spawn(function()
             end
             State.serverJoinTime = os.clock()
             State.lastHitTime = os.clock()
-            State.status = "⚔️ ACTIVO ⚔️"
+            State.status = "⚔️ VIVA PETRO ⚔️"
         end
     end
 end)
@@ -448,17 +435,17 @@ local function startAll()
     State.respawnAbuse = true
     State.lastHitTime = os.clock()
     State.currentBounty = getBounty()
-    State.status = "⚔️ ACTIVO ⚔️"
-    print("[SACRED] ULTIMATE EDITION ACTIVADA")
+    State.status = "⚔️ VIVA PETRO ⚔️"
+    print("[🇨🇴 VIVA PETRO] ACTIVADO")
 end
 
--- ==================== UI MODERNA CON BOTONES ====================
+-- ==================== UI MODERNA CON BANDERAS DE COLOMBIA ====================
 local THEMES = {
     Default = {accent = Color3.fromRGB(210, 215, 225), bg = Color3.fromRGB(9, 9, 11), panel = Color3.fromRGB(14, 14, 16), card = Color3.fromRGB(17, 17, 20)},
     Red = {accent = Color3.fromRGB(230, 60, 60), bg = Color3.fromRGB(14, 7, 7), panel = Color3.fromRGB(18, 10, 10), card = Color3.fromRGB(20, 12, 12)},
     Cyan = {accent = Color3.fromRGB(0, 190, 240), bg = Color3.fromRGB(8, 10, 20), panel = Color3.fromRGB(10, 13, 25), card = Color3.fromRGB(12, 15, 28)},
     Green = {accent = Color3.fromRGB(50, 220, 100), bg = Color3.fromRGB(7, 13, 8), panel = Color3.fromRGB(9, 17, 10), card = Color3.fromRGB(10, 19, 12)},
-    Purple = {accent = Color3.fromRGB(170, 80, 255), bg = Color3.fromRGB(11, 7, 18), panel = Color3.fromRGB(14, 9, 22), card = Color3.fromRGB(16, 11, 26)},
+    Yellow = {accent = Color3.fromRGB(240, 210, 40), bg = Color3.fromRGB(13, 12, 6), panel = Color3.fromRGB(17, 16, 8), card = Color3.fromRGB(19, 18, 9)},
 }
 
 local THEME = THEMES[CONFIG.Theme] or THEMES.Cyan
@@ -475,22 +462,29 @@ local C = {
     muted = Color3.fromRGB(90, 100, 135),
 }
 
+-- Colores de la bandera de Colombia
+local COLORS = {
+    yellow = Color3.fromRGB(252, 209, 22),   -- Amarillo
+    blue = Color3.fromRGB(0, 56, 147),       -- Azul
+    red = Color3.fromRGB(206, 17, 38),       -- Rojo
+}
+
 -- Limpiar UI anterior
 for _, parent in ipairs({player.PlayerGui, game:GetService("CoreGui")}) do
-    pcall(function() parent:FindFirstChild("SacredUltimateUI"):Destroy() end)
+    pcall(function() parent:FindFirstChild("VivaPetroUI"):Destroy() end)
 end
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "SacredUltimateUI"
+ScreenGui.Name = "VivaPetroUI"
 ScreenGui.ResetOnSpawn = false
 pcall(function() ScreenGui.Parent = game:GetService("CoreGui") end)
 if not ScreenGui.Parent then ScreenGui.Parent = player:WaitForChild("PlayerGui") end
 
--- Frame principal (arrastrable)
+-- Frame principal
 local MainFrame = Instance.new("Frame")
 MainFrame.Parent = ScreenGui
-MainFrame.Size = UDim2.new(0, 380, 0, 520)
-MainFrame.Position = UDim2.new(0.5, -190, 0.5, -260)
+MainFrame.Size = UDim2.new(0, 420, 0, 540)
+MainFrame.Position = UDim2.new(0.5, -210, 0.5, -270)
 MainFrame.BackgroundColor3 = T_BG
 MainFrame.BackgroundTransparency = 0
 MainFrame.BorderSizePixel = 0
@@ -502,13 +496,13 @@ MainCorner.CornerRadius = UDim.new(0, 12)
 
 local MainStroke = Instance.new("UIStroke")
 MainStroke.Parent = MainFrame
-MainStroke.Color = T_ACCENT
-MainStroke.Thickness = 1.5
+MainStroke.Color = COLORS.yellow
+MainStroke.Thickness = 2
 
--- Barra de título para arrastrar
+-- Barra de título con bandera
 local TitleBar = Instance.new("Frame")
 TitleBar.Parent = MainFrame
-TitleBar.Size = UDim2.new(1, 0, 0, 45)
+TitleBar.Size = UDim2.new(1, 0, 0, 55)
 TitleBar.BackgroundColor3 = T_PANEL
 TitleBar.BorderSizePixel = 0
 
@@ -516,49 +510,94 @@ local TitleCorner = Instance.new("UICorner")
 TitleCorner.Parent = TitleBar
 TitleCorner.CornerRadius = UDim.new(0, 12)
 
+-- Bandera izquierda
+local FlagLeft = Instance.new("Frame")
+FlagLeft.Parent = TitleBar
+FlagLeft.Size = UDim2.new(0, 40, 1, 0)
+FlagLeft.Position = UDim2.new(0, 5, 0, 0)
+FlagLeft.BackgroundColor3 = COLORS.yellow
+FlagLeft.BorderSizePixel = 0
+
+local FlagLeftBlue = Instance.new("Frame")
+FlagLeftBlue.Parent = FlagLeft
+FlagLeftBlue.Size = UDim2.new(1, 0, 0.5, 0)
+FlagLeftBlue.Position = UDim2.new(0, 0, 0, 0)
+FlagLeftBlue.BackgroundColor3 = COLORS.blue
+FlagLeftBlue.BorderSizePixel = 0
+
+local FlagLeftRed = Instance.new("Frame")
+FlagLeftRed.Parent = FlagLeft
+FlagLeftRed.Size = UDim2.new(1, 0, 0.5, 0)
+FlagLeftRed.Position = UDim2.new(0, 0, 0.5, 0)
+FlagLeftRed.BackgroundColor3 = COLORS.red
+FlagLeftRed.BorderSizePixel = 0
+
+-- Título
 local Title = Instance.new("TextLabel")
 Title.Parent = TitleBar
-Title.Size = UDim2.new(0.7, 0, 1, 0)
-Title.Position = UDim2.new(0, 15, 0, 0)
+Title.Size = UDim2.new(0.6, 0, 1, 0)
+Title.Position = UDim2.new(0, 55, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "🔥 SACRED ULTIMATE 🔥"
-Title.TextColor3 = T_ACCENT
-Title.TextSize = 16
+Title.Text = "🇨🇴 VIVA PETRO 🇨🇴"
+Title.TextColor3 = COLORS.yellow
+Title.TextSize = 18
 Title.Font = Enum.Font.GothamBlack
 Title.TextXAlignment = Enum.TextXAlignment.Left
 
 local SubTitle = Instance.new("TextLabel")
 SubTitle.Parent = TitleBar
-SubTitle.Size = UDim2.new(0.7, 0, 0, 16)
-SubTitle.Position = UDim2.new(0, 15, 0, 26)
+SubTitle.Size = UDim2.new(0.6, 0, 0, 16)
+SubTitle.Position = UDim2.new(0, 55, 0, 34)
 SubTitle.BackgroundTransparency = 1
-SubTitle.Text = "BOUNTY + ABUSE INF RANGE"
+SubTitle.Text = "EL PODER DEL PUEBLO"
 SubTitle.TextColor3 = C.muted
 SubTitle.TextSize = 9
 SubTitle.Font = Enum.Font.Gotham
 SubTitle.TextXAlignment = Enum.TextXAlignment.Left
 
+-- Bandera derecha
+local FlagRight = Instance.new("Frame")
+FlagRight.Parent = TitleBar
+FlagRight.Size = UDim2.new(0, 40, 1, 0)
+FlagRight.Position = UDim2.new(1, -45, 0, 0)
+FlagRight.BackgroundColor3 = COLORS.yellow
+FlagRight.BorderSizePixel = 0
+
+local FlagRightBlue = Instance.new("Frame")
+FlagRightBlue.Parent = FlagRight
+FlagRightBlue.Size = UDim2.new(1, 0, 0.5, 0)
+FlagRightBlue.Position = UDim2.new(0, 0, 0, 0)
+FlagRightBlue.BackgroundColor3 = COLORS.blue
+FlagRightBlue.BorderSizePixel = 0
+
+local FlagRightRed = Instance.new("Frame")
+FlagRightRed.Parent = FlagRight
+FlagRightRed.Size = UDim2.new(1, 0, 0.5, 0)
+FlagRightRed.Position = UDim2.new(0, 0, 0.5, 0)
+FlagRightRed.BackgroundColor3 = COLORS.red
+FlagRightRed.BorderSizePixel = 0
+
 -- Botón minimizar
 local MinBtn = Instance.new("TextButton")
 MinBtn.Parent = TitleBar
-MinBtn.Size = UDim2.new(0, 35, 0, 35)
-MinBtn.Position = UDim2.new(1, -45, 0.5, -17.5)
+MinBtn.Size = UDim2.new(0, 30, 0, 30)
+MinBtn.Position = UDim2.new(1, -80, 0.5, -15)
 MinBtn.BackgroundColor3 = Color3.fromRGB(80, 30, 30)
 MinBtn.Text = "−"
 MinBtn.TextColor3 = Color3.new(1, 1, 1)
-MinBtn.TextSize = 20
+MinBtn.TextSize = 18
 MinBtn.Font = Enum.Font.GothamBold
 MinBtn.BorderSizePixel = 0
 
 local MinCorner = Instance.new("UICorner")
 MinCorner.Parent = MinBtn
-MinCorner.CornerRadius = UDim.new(0, 8)
+MinCorner.CornerRadius = UDim.new(0, 6)
 
 -- Panel de estadísticas
 local StatsPanel = Instance.new("Frame")
 StatsPanel.Parent = MainFrame
-StatsPanel.Size = UDim2.new(0.9, 0, 0, 70)
-StatsPanel.Position = UDim2.new(0.05, 0, 0, 55)
+StatsPanel.Size = UDim2.new(0.9, 0, 0, 80)
+StatsPanel.Position = UDim2.new(0.05, 0, 0, 65)
 StatsPanel.BackgroundColor3 = T_CARD
 StatsPanel.BorderSizePixel = 0
 
@@ -582,7 +621,7 @@ KillsValue.Size = UDim2.new(0.33, 0, 0.5, 0)
 KillsValue.Position = UDim2.new(0, 0, 0.5, 0)
 KillsValue.BackgroundTransparency = 1
 KillsValue.Text = "0"
-KillsValue.TextColor3 = C.red
+KillsValue.TextColor3 = COLORS.red
 KillsValue.TextSize = 24
 KillsValue.Font = Enum.Font.GothamBlack
 
@@ -602,7 +641,7 @@ EarnedValue.Size = UDim2.new(0.34, 0, 0.5, 0)
 EarnedValue.Position = UDim2.new(0.33, 0, 0.5, 0)
 EarnedValue.BackgroundTransparency = 1
 EarnedValue.Text = "+0"
-EarnedValue.TextColor3 = C.green
+EarnedValue.TextColor3 = COLORS.yellow
 EarnedValue.TextSize = 20
 EarnedValue.Font = Enum.Font.GothamBlack
 
@@ -622,7 +661,7 @@ BountyValue.Size = UDim2.new(0.33, 0, 0.5, 0)
 BountyValue.Position = UDim2.new(0.67, 0, 0.5, 0)
 BountyValue.BackgroundTransparency = 1
 BountyValue.Text = "0"
-BountyValue.TextColor3 = T_ACCENT
+BountyValue.TextColor3 = COLORS.blue
 BountyValue.TextSize = 20
 BountyValue.Font = Enum.Font.GothamBlack
 
@@ -630,7 +669,7 @@ BountyValue.Font = Enum.Font.GothamBlack
 local StatusFrame = Instance.new("Frame")
 StatusFrame.Parent = MainFrame
 StatusFrame.Size = UDim2.new(0.9, 0, 0, 35)
-StatusFrame.Position = UDim2.new(0.05, 0, 0, 135)
+StatusFrame.Position = UDim2.new(0.05, 0, 0, 155)
 StatusFrame.BackgroundColor3 = T_CARD
 StatusFrame.BorderSizePixel = 0
 
@@ -642,7 +681,7 @@ local StatusDot = Instance.new("Frame")
 StatusDot.Parent = StatusFrame
 StatusDot.Size = UDim2.new(0, 8, 0, 8)
 StatusDot.Position = UDim2.new(0, 12, 0.5, -4)
-StatusDot.BackgroundColor3 = C.green
+StatusDot.BackgroundColor3 = COLORS.green
 StatusDot.BorderSizePixel = 0
 
 local StatusDotCorner = Instance.new("UICorner")
@@ -654,7 +693,7 @@ StatusText.Parent = StatusFrame
 StatusText.Size = UDim2.new(0.8, 0, 1, 0)
 StatusText.Position = UDim2.new(0, 28, 0, 0)
 StatusText.BackgroundTransparency = 1
-StatusText.Text = "⚔️ INACTIVO ⚔️"
+StatusText.Text = "🇨🇴 VIVA PETRO 🇨🇴"
 StatusText.TextColor3 = C.text
 StatusText.TextSize = 12
 StatusText.Font = Enum.Font.Gotham
@@ -664,7 +703,7 @@ StatusText.TextXAlignment = Enum.TextXAlignment.Left
 local TimerBg = Instance.new("Frame")
 TimerBg.Parent = MainFrame
 TimerBg.Size = UDim2.new(0.9, 0, 0, 10)
-TimerBg.Position = UDim2.new(0.05, 0, 0, 180)
+TimerBg.Position = UDim2.new(0.05, 0, 0, 200)
 TimerBg.BackgroundColor3 = Color3.fromRGB(25, 28, 35)
 TimerBg.BorderSizePixel = 0
 
@@ -675,7 +714,7 @@ TimerBgCorner.CornerRadius = UDim.new(0, 5)
 local TimerBar = Instance.new("Frame")
 TimerBar.Parent = TimerBg
 TimerBar.Size = UDim2.new(1, 0, 1, 0)
-TimerBar.BackgroundColor3 = T_ACCENT
+TimerBar.BackgroundColor3 = COLORS.yellow
 TimerBar.BorderSizePixel = 0
 
 local TimerBarCorner = Instance.new("UICorner")
@@ -713,54 +752,54 @@ local function CreateButton(parent, text, yPos, bgColor, callback)
 end
 
 -- Botón Auto Bounty
-local BountyBtn = CreateButton(MainFrame, "🔴 AUTO BOUNTY", 200, Color3.fromRGB(150, 0, 0), function()
+local BountyBtn = CreateButton(MainFrame, "🔴 AUTO BOUNTY", 220, Color3.fromRGB(150, 0, 0), function()
     if State.active then
         State.active = false
         BountyBtn.Text = "🔴 AUTO BOUNTY"
         BountyBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-        StatusText.Text = "⚔️ INACTIVO ⚔️"
-        StatusDot.BackgroundColor3 = C.red
-        print("[!] Auto Bounty DESACTIVADO")
+        StatusText.Text = "🇨🇴 INACTIVO 🇨🇴"
+        StatusDot.BackgroundColor3 = COLORS.red
+        print("[🇨🇴 VIVA PETRO] Auto Bounty DESACTIVADO")
     else
         startAll()
         selectFaction(CONFIG.Team)
         BountyBtn.Text = "🟢 AUTO BOUNTY (ACTIVO)"
         BountyBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-        StatusText.Text = "⚔️ ACTIVO ⚔️"
-        StatusDot.BackgroundColor3 = C.green
-        print("[✓] Auto Bounty ACTIVADO")
+        StatusText.Text = "🇨🇴 VIVA PETRO 🇨🇴"
+        StatusDot.BackgroundColor3 = COLORS.green
+        print("[🇨🇴 VIVA PETRO] Auto Bounty ACTIVADO")
     end
 end)
 
 -- Botón Abuse Inf Range
-local AbuseBtn = CreateButton(MainFrame, "🔴 ABUSE INF RANGE", 252, Color3.fromRGB(100, 0, 150), function()
+local AbuseBtn = CreateButton(MainFrame, "🔴 ABUSE INF RANGE", 272, Color3.fromRGB(100, 0, 150), function()
     AbuseState.active = not AbuseState.active
     if AbuseState.active then
         AbuseBtn.Text = "🟢 ABUSE INF RANGE (ACTIVO)"
         AbuseBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-        print("[✓] Abuse Inf Range ACTIVADO")
+        print("[🇨🇴 VIVA PETRO] Abuse Inf Range ACTIVADO")
     else
         AbuseBtn.Text = "🔴 ABUSE INF RANGE"
         AbuseBtn.BackgroundColor3 = Color3.fromRGB(100, 0, 150)
-        print("[!] Abuse Inf Range DESACTIVADO")
+        print("[🇨🇴 VIVA PETRO] Abuse Inf Range DESACTIVADO")
     end
 end)
 
 -- Botón Void Skill
-local VoidBtn = CreateButton(MainFrame, "🌌 VOID SKILL (INF)", 304, Color3.fromRGB(0, 100, 150), function()
+local VoidBtn = CreateButton(MainFrame, "🌌 VOID SKILL (INF)", 324, Color3.fromRGB(0, 100, 150), function()
     VoidSkill()
     StatusText.Text = "🌌 VOID SKILL EJECUTADO"
     task.delay(1.5, function()
         if State.active then
-            StatusText.Text = "⚔️ ACTIVO ⚔️"
+            StatusText.Text = "🇨🇴 VIVA PETRO 🇨🇴"
         else
-            StatusText.Text = "⚔️ INACTIVO ⚔️"
+            StatusText.Text = "🇨🇴 INACTIVO 🇨🇴"
         end
     end)
 end)
 
 -- Botón Facción
-local FactionBtn = CreateButton(MainFrame, "🏴‍☠️ SELECCIONAR " .. CONFIG.Team, 356, Color3.fromRGB(30, 80, 120), function()
+local FactionBtn = CreateButton(MainFrame, "🏴‍☠️ SELECCIONAR " .. CONFIG.Team, 376, Color3.fromRGB(30, 80, 120), function()
     selectFaction(CONFIG.Team)
     FactionBtn.Text = "✅ " .. CONFIG.Team .. " SELECCIONADO"
     task.delay(1.5, function()
@@ -769,7 +808,7 @@ local FactionBtn = CreateButton(MainFrame, "🏴‍☠️ SELECCIONAR " .. CONFI
 end)
 
 -- Botón Fix Camera
-local FixBtn = CreateButton(MainFrame, "📷 FIX CAMERA", 408, Color3.fromRGB(40, 40, 50), function()
+local FixBtn = CreateButton(MainFrame, "📷 FIX CAMERA", 428, Color3.fromRGB(40, 40, 50), function()
     AbuseState.active = false
     AbuseBtn.Text = "🔴 ABUSE INF RANGE"
     AbuseBtn.BackgroundColor3 = Color3.fromRGB(100, 0, 150)
@@ -781,12 +820,55 @@ local FixBtn = CreateButton(MainFrame, "📷 FIX CAMERA", 408, Color3.fromRGB(40
     StatusText.Text = "📷 CAMARA RESTAURADA"
     task.delay(1.5, function()
         if State.active then
-            StatusText.Text = "⚔️ ACTIVO ⚔️"
+            StatusText.Text = "🇨🇴 VIVA PETRO 🇨🇴"
         else
-            StatusText.Text = "⚔️ INACTIVO ⚔️"
+            StatusText.Text = "🇨🇴 INACTIVO 🇨🇴"
         end
     end)
 end)
+
+-- Footer con bandera
+local Footer = Instance.new("Frame")
+Footer.Parent = MainFrame
+Footer.Size = UDim2.new(1, 0, 0, 25)
+Footer.Position = UDim2.new(0, 0, 1, -25)
+Footer.BackgroundColor3 = T_PANEL
+Footer.BackgroundTransparency = 0.5
+Footer.BorderSizePixel = 0
+
+local FooterCorner = Instance.new("UICorner")
+FooterCorner.Parent = Footer
+FooterCorner.CornerRadius = UDim.new(0, 8)
+
+local FooterFlag = Instance.new("Frame")
+FooterFlag.Parent = Footer
+FooterFlag.Size = UDim2.new(0, 50, 1, 0)
+FooterFlag.Position = UDim2.new(0.5, -25, 0, 0)
+FooterFlag.BackgroundColor3 = COLORS.yellow
+FooterFlag.BorderSizePixel = 0
+
+local FooterFlagBlue = Instance.new("Frame")
+FooterFlagBlue.Parent = FooterFlag
+FooterFlagBlue.Size = UDim2.new(1, 0, 0.5, 0)
+FooterFlagBlue.Position = UDim2.new(0, 0, 0, 0)
+FooterFlagBlue.BackgroundColor3 = COLORS.blue
+FooterFlagBlue.BorderSizePixel = 0
+
+local FooterFlagRed = Instance.new("Frame")
+FooterFlagRed.Parent = FooterFlag
+FooterFlagRed.Size = UDim2.new(1, 0, 0.5, 0)
+FooterFlagRed.Position = UDim2.new(0, 0, 0.5, 0)
+FooterFlagRed.BackgroundColor3 = COLORS.red
+FooterFlagRed.BorderSizePixel = 0
+
+local FooterText = Instance.new("TextLabel")
+FooterText.Parent = Footer
+FooterText.Size = UDim2.new(1, 0, 1, 0)
+FooterText.BackgroundTransparency = 1
+FooterText.Text = "🇨🇴 EL PODER DEL PUEBLO - VIVA PETRO 🇨🇴"
+FooterText.TextColor3 = C.muted
+FooterText.TextSize = 9
+FooterText.Font = Enum.Font.Gotham
 
 -- ==================== DRAG & DROP ====================
 local dragging = false
@@ -814,21 +896,20 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
--- Minimizar
+-- ==================== MINIMIZAR ====================
 local minimized = false
 MinBtn.MouseButton1Click:Connect(function()
     minimized = not minimized
     if minimized then
-        MainFrame:TweenSize(UDim2.new(0, 380, 0, 45), "Out", "Quad", 0.2, true)
+        MainFrame:TweenSize(UDim2.new(0, 420, 0, 55), "Out", "Quad", 0.2, true)
         MinBtn.Text = "+"
         for _, child in ipairs(MainFrame:GetChildren()) do
             if child ~= TitleBar and child ~= MainStroke then
                 child.Visible = false
             end
         end
-        TitleBar.Size = UDim2.new(1, 0, 0, 45)
     else
-        MainFrame:TweenSize(UDim2.new(0, 380, 0, 520), "Out", "Quad", 0.2, true)
+        MainFrame:TweenSize(UDim2.new(0, 420, 0, 540), "Out", "Quad", 0.2, true)
         MinBtn.Text = "−"
         for _, child in ipairs(MainFrame:GetChildren()) do
             if child ~= TitleBar and child ~= MainStroke then
@@ -859,7 +940,13 @@ end)
 print([[
 ╔══════════════════════════════════════════════════════════════════════╗
 ║                                                                      ║
-║     🔥 SACRED ULTIMATE - BOUNTY + ABUSE INF RANGE 🔥                ║
+║     🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴     ║
+║                                                                      ║
+║     🔥 VIVA PETRO - BOUNTY + ABUSE INF RANGE 🔥                     ║
+║                                                                      ║
+║     🇨🇴 EL PODER DEL PUEBLO - VIVA PETRO CARAJO 🇨🇴                  ║
+║                                                                      ║
+║     🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴🇨🇴     ║
 ║                                                                      ║
 ╠══════════════════════════════════════════════════════════════════════╣
 ║                                                                      ║
@@ -877,6 +964,8 @@ print([[
 ║   • SELECCIONAR FACCIÓN - Pirates o Marines                        ║
 ║   • FIX CAMERA - Restaura la cámara y desancla                     ║
 ║                                                                      ║
+║   🇨🇴 ¡VIVA PETRO, CARAJO! 🇨🇴                                      ║
+║                                                                      ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ]])
 
@@ -886,6 +975,7 @@ startAll()
 selectFaction(CONFIG.Team)
 BountyBtn.Text = "🟢 AUTO BOUNTY (ACTIVO)"
 BountyBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-StatusText.Text = "⚔️ ACTIVO ⚔️"
-StatusDot.BackgroundColor3 = C.green
-print("[✓] Auto Bounty INICIADO AUTOMÁTICAMENTE")
+StatusText.Text = "🇨🇴 VIVA PETRO 🇨🇴"
+StatusDot.BackgroundColor3 = COLORS.green
+print("[🇨🇴 VIVA PETRO] Auto Bounty INICIADO AUTOMÁTICAMENTE")
+print("[🇨🇴 VIVA PETRO] ¡EL PODER DEL PUEBLO! 🇨🇴")
